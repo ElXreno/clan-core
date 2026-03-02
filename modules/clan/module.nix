@@ -191,6 +191,17 @@ in
                 Run:
                   nix flake update nixpkgs
               '');
+
+            pkgsForModule =
+              {
+                config,
+                options,
+                lib,
+                ...
+              }:
+              lib.mkIf options.nixpkgs.hostPlatform.isDefined {
+                nixpkgs.pkgs = lib.mkDefault pkgsFor.${config.nixpkgs.hostPlatform.system};
+              };
           in
           {
             imports = [
@@ -215,7 +226,8 @@ in
               (lib.optionalAttrs (clan-core ? "${_class}Modules") clan-core."${_class}Modules".clanCore)
             ]
             ++ lib.optionals (_class == "nixos") (v.machineImports or [ ])
-            ++ lib.optionals (_class == "darwin") (v.darwinImports or [ ]);
+            ++ lib.optionals (_class == "darwin") (v.darwinImports or [ ])
+            ++ lib.optional (_class == "nixos" || _class == "darwin") pkgsForModule;
 
             # default hostname
             networking.hostName = lib.mkDefault name;
