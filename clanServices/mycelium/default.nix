@@ -97,8 +97,8 @@
               ];
               script = ''
                 timeout 5 mycelium --key-file "$out"/key || :
-                mycelium inspect --key-file "$out"/key --json | jq -r .publicKey > "$out"/pubkey
-                mycelium inspect --key-file "$out"/key --json | jq -r .address > "$out"/ip
+                mycelium inspect --key-file "$out"/key --json | jq -rj .publicKey > "$out"/pubkey
+                mycelium inspect --key-file "$out"/key --json | jq -rj .address > "$out"/ip
               '';
             };
           };
