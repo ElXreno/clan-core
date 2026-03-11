@@ -115,6 +115,32 @@
             "ws://192.168.1.1:6446"
           ];
         };
+
+        options.extraAllowedPublicKeys = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = ''
+            Additional Yggdrasil public keys to allow peering from.
+            Use this to whitelist external devices (e.g. phones) that are
+            not part of the clan. Keys are added to AllowedEncryptionPublicKeys.
+          '';
+          example = [
+            "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+          ];
+        };
+
+        options.extraAllowedIPs = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = ''
+            Additional Yggdrasil IPv6 addresses to allow through the firewall.
+            Use this to whitelist external devices (e.g. phones) that are
+            not part of the clan.
+          '';
+          example = [
+            "208:c6f6:ba06:81a6:31cf:df13:2b88:a1d"
+          ];
+        };
       };
     perInstance =
       {
@@ -215,7 +241,7 @@
                   }
                 )
               ) (lib.attrNames roles.default.machines)
-            );
+            ) ++ settings.extraAllowedPublicKeys;
 
             # Collect Yggdrasil IPv6 addresses from all machines in the role
             allowedYggdrasilIPs = lib.filter (ip: ip != "") (
@@ -231,7 +257,7 @@
                   }
                 )
               ) (lib.attrNames roles.default.machines)
-            );
+            ) ++ settings.extraAllowedIPs;
 
           in
           {
