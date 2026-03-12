@@ -356,6 +356,9 @@
                 ip6tables -N ygg-input 2>/dev/null || true
                 ip6tables -F ygg-input
 
+                # Allow responses to outbound connections (e.g. accessing public Yggdrasil services)
+                ip6tables -A ygg-input -i ygg -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+
                 # Allow traffic from clan member IPs to continue to port-based firewall rules
                 ${lib.concatMapStringsSep "\n    " (
                   ip: "ip6tables -A ygg-input -s ${lib.escapeShellArg ip} -i ygg -j RETURN"
@@ -383,6 +386,9 @@
               content = ''
                 chain input {
                   type filter hook input priority -10; policy accept;
+
+                  # Allow responses to outbound connections (e.g. accessing public Yggdrasil services)
+                  iifname "ygg" ct state established,related counter return
 
                   # Only apply to ygg interface
                   iifname "ygg" ip6 saddr {
