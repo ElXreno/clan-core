@@ -10,6 +10,7 @@ from .generate import register_generate_parser
 from .get import register_get_parser
 from .keygen import register_keygen_parser
 from .list import register_list_parser
+from .prune import register_prune_parser
 from .set import register_set_parser
 from .upload import register_upload_parser
 
@@ -73,6 +74,30 @@ Examples:
         formatter_class=HelpFormatter,
     )
     register_fix_parser(fix_parser)
+
+    prune_parser = subparser.add_parser(
+        "prune",
+        help="remove vars that are no longer referenced by any generator",
+        epilog=(
+            """
+This subcommand removes orphaned vars that exist on disk but are no longer
+defined by any generator in the current NixOS configuration.
+
+Examples:
+
+  $ clan vars prune
+  Will find and remove orphaned vars for all machines.
+
+  $ clan vars prune [MACHINE]
+  Will find and remove orphaned vars for the specified machine.
+
+  $ clan vars prune [MACHINE] --dry-run
+  Will list orphaned vars without removing them.
+        """
+        ),
+        formatter_class=HelpFormatter,
+    )
+    register_prune_parser(prune_parser)
 
     list_parser = subparser.add_parser(
         "list",
