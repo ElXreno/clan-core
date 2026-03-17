@@ -184,7 +184,11 @@ in
                       -s $in/openssh-ca/id_ed25519 \
                       -I ${config.clan.core.settings.machine.name} \
                       -h \
-                      -n ${lib.concatMapStringsSep "," (d: "${config.clan.core.settings.machine.name}.${d}") domains} \
+                      -n ${
+                        lib.concatMapStringsSep "," (
+                          d: "${lib.toLower config.clan.core.settings.machine.name}.${d}"
+                        ) domains
+                      } \
                       $in/openssh/ssh.id_ed25519.pub
                     mv $in/openssh/ssh.id_ed25519-cert.pub "$out"/ssh.id_ed25519-cert.pub
                   '';
