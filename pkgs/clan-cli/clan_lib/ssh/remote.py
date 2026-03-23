@@ -381,7 +381,10 @@ class Remote:
         url = f"{scheme}://"
         if self.user:
             url += f"{self.user}@"
-        url += self.address
+        if self.is_ipv6():
+            url += f"[{self.address}]"
+        else:
+            url += self.address
         if self.port:
             url += f":{self.port}"
         return url

@@ -202,7 +202,10 @@ def run_machine_update(
             ]
 
             if _build_host != _target_host:
-                nix_options += ["--target-host", target_host.target]
+                target = target_host.target
+                if isinstance(target_host, Remote) and target_host.is_ipv6():
+                    target = f"{target_host.user}@[{target_host.address}]"
+                nix_options += ["--target-host", target]
 
                 if target_host.user != "root":
                     nix_options += ["--use-remote-sudo"]
