@@ -53,8 +53,6 @@ def graphics_options(nixos_config: dict[str, Any]) -> GraphicOptions:
             "gtk,gl=on",
             "-device",
             "virtio-gpu-gl",
-            "-display",
-            "spice-app,gl=on",
         ]
     else:
         display_options = ["-display", "spice-app"]
