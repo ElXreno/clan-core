@@ -57,6 +57,13 @@ in
 
   boot.initrd.kernelModules = [ "virtiofs" ];
   virtualisation.writableStore = false;
+
+  # Tell the nix daemon the store is read-only, otherwise it crashes
+  # trying to chown the read-only virtiofs mount.
+  nix.settings.experimental-features = [
+    "read-only-local-store"
+  ];
+  systemd.services.nix-daemon.environment.NIX_REMOTE = "local?read-only=true";
   virtualisation.fileSystems = lib.mkForce (
     {
       "/nix/store" = {
