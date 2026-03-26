@@ -24,6 +24,7 @@ from .folders import (
 )
 from .sops import (
     decrypt_file,
+    decrypt_file_raw,
     encrypt_file,
     load_age_plugins,
     read_keys,
@@ -407,6 +408,15 @@ def decrypt_secret(secret_path: Path, age_plugins: list[str]) -> str:
         msg = f"Secret '{secret_path!s}' does not exist"
         raise ClanError(msg)
     return decrypt_file(path, age_plugins=age_plugins)
+
+
+def decrypt_secret_raw(secret_path: Path, age_plugins: list[str]) -> bytes:
+    """Decrypt a secret and return the raw bytes without lossy UTF-8 conversion."""
+    path = secret_path / "secret"
+    if not path.exists():
+        msg = f"Secret '{secret_path!s}' does not exist"
+        raise ClanError(msg)
+    return decrypt_file_raw(path, age_plugins=age_plugins)
 
 
 def get_command(args: argparse.Namespace) -> None:

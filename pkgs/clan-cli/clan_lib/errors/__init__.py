@@ -100,6 +100,7 @@ class CmdOut:
     command_list: list[str]
     returncode: int
     msg: str | None
+    stdout_raw: bytes = b""
 
     @property
     def command(self) -> str:

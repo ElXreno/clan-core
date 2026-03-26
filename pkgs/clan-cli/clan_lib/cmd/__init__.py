@@ -66,7 +66,7 @@ def handle_io(
     cmd: list[str] | None = None,
     cwd: Path | None = None,
     env: dict[str, str] | None = None,
-) -> tuple[str, str]:
+) -> tuple[str, str, bytes]:
     rlist = [
         process.stdout,
         process.stderr,
@@ -110,6 +110,7 @@ def handle_io(
                 command_list=cmd or [],
                 returncode=-1,  # Indicate abnormal termination
                 msg=None,
+                stdout_raw=stdout_buf,
             )
             raise ClanCmdTimeoutError(cmd_out, timeout)
 
@@ -182,7 +183,11 @@ def handle_io(
                     process.stdin.close()
             else:
                 wlist.remove(process.stdin)
-    return stdout_buf.decode("utf-8", "replace"), stderr_buf.decode("utf-8", "replace")
+    return (
+        stdout_buf.decode("utf-8", "replace"),
+        stderr_buf.decode("utf-8", "replace"),
+        stdout_buf,
+    )
 
 
 @contextmanager
@@ -402,7 +407,7 @@ def run(
 
         input_bytes = options.input if isinstance(options.input, bytes) else None
 
-        stdout_buf, stderr_buf = handle_io(
+        stdout_buf, stderr_buf, stdout_raw = handle_io(
             process,
             options.log,
             prefix=options.prefix,
@@ -430,6 +435,7 @@ def run(
         command_list=cmd,
         returncode=process.returncode,
         msg=options.error_msg,
+        stdout_raw=stdout_raw,
     )
 
     if cmdlog.isEnabledFor(logging.DEBUG) and options.trace:

@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from clan_cli.secrets.secrets import decrypt_secret
+from clan_cli.secrets.secrets import decrypt_secret, decrypt_secret_raw
 from clan_cli.tests.fixtures_flakes import ClanFlake, create_test_machine_config
 from clan_cli.tests.helpers import cli
 from clan_cli.tests.helpers.flake_cache import invalidate_flake_cache
@@ -513,9 +513,16 @@ def test_get_generators_only_decrypts_requested_machines(
         decrypted_paths.append(path)
         return decrypt_secret(path, age_plugins)
 
+    def tracking_decrypt_raw(path: Path, age_plugins: list[str]) -> bytes:
+        decrypted_paths.append(path)
+        return decrypt_secret_raw(path, age_plugins)
+
     # Patch where it's used, not where it's defined (the import happens at module load)
     monkeypatch.setattr(
         "clan_lib.vars.secret_modules.sops.decrypt_secret", tracking_decrypt
+    )
+    monkeypatch.setattr(
+        "clan_lib.vars.secret_modules.sops.decrypt_secret_raw", tracking_decrypt_raw
     )
 
     # Get generators for just machine1 with previous values

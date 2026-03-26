@@ -17,6 +17,7 @@ from clan_cli.secrets.secrets import (
     allow_member,
     collect_keys_for_path,
     decrypt_secret,
+    decrypt_secret_raw,
     encrypt_secret,
     groups_folder,
     has_secret,
@@ -238,10 +239,10 @@ class SecretStore(StoreBase):
         path = self.secret_path(generator, name)
         if self._secret_cache is not None and path in self._secret_cache:
             return self._secret_cache[path]
-        value = decrypt_secret(
+        value = decrypt_secret_raw(
             path,
             age_plugins=load_age_plugins(self.flake),
-        ).encode("utf-8")
+        )
         if self._secret_cache is not None:
             self._secret_cache[path] = value
         return value

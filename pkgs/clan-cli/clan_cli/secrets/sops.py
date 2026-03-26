@@ -238,7 +238,7 @@ def sops_run(
     public_keys: Iterable[SopsKey],
     age_plugins: list[str],
     run_opts: RunOpts | None = None,
-) -> tuple[int, str]:
+) -> tuple[int, str, bytes]:
     """Call the sops binary for the given operation."""
     # louis(2024-11-19): I regrouped the call into the sops binary into this
     # one place because calling into sops needs to be done with a carefully
@@ -315,9 +315,9 @@ def sops_run(
             # Use direct stdout / stderr, as else it breaks editor integration.
             # We never need this in our UI. TUI only.
             p1 = subprocess.run(cmd, check=False, text=True)
-            return p1.returncode, ""
+            return p1.returncode, "", b""
         p = run(cmd, opts)
-        return p.returncode, p.stdout
+        return p.returncode, p.stdout, p.stdout_raw
 
 
 def get_public_age_keys(contents: str) -> set[str]:
@@ -481,7 +481,7 @@ def update_keys(
     secret_path = secret_path / "secret"
     error_msg = f"Could not update keys for {secret_path}"
 
-    rc, _ = sops_run(
+    rc, _, _ = sops_run(
         Operation.UPDATE_KEYS,
         secret_path,
         keys,
@@ -503,7 +503,7 @@ def encrypt_file(
 
     if not content:
         # This will spawn an editor to edit the file.
-        rc, _ = sops_run(
+        rc, _, _ = sops_run(
             Operation.EDIT,
             secret_path,
             pubkeys,
@@ -562,7 +562,7 @@ def decrypt_file(secret_path: Path, age_plugins: list[str]) -> str:
     # decryption uses private keys from the environment or default paths:
     no_public_keys_needed: list[SopsKey] = []
 
-    _, stdout = sops_run(
+    _, stdout, _ = sops_run(
         Operation.DECRYPT,
         secret_path,
         no_public_keys_needed,
@@ -570,6 +570,24 @@ def decrypt_file(secret_path: Path, age_plugins: list[str]) -> str:
         age_plugins=age_plugins,
     )
     return stdout
+
+
+def decrypt_file_raw(secret_path: Path, age_plugins: list[str]) -> bytes:
+    """Decrypt a sops-encrypted file and return the raw bytes.
+
+    Unlike decrypt_file(), this preserves binary content without lossy
+    UTF-8 round-tripping.
+    """
+    no_public_keys_needed: list[SopsKey] = []
+
+    _, _, raw = sops_run(
+        Operation.DECRYPT,
+        secret_path,
+        no_public_keys_needed,
+        run_opts=RunOpts(error_msg=f"Could not decrypt {secret_path}"),
+        age_plugins=age_plugins,
+    )
+    return raw
 
 
 def get_recipients(secret_path: Path) -> set[SopsKey]:
