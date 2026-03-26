@@ -279,7 +279,7 @@
                       default = "";
                     };
                   in
-                  "${ip} ${name}.${config.clan.core.settings.domain}"
+                  "${ip} ${name}.${config.clan.core.settings.domain} ${name}"
                 ) (lib.attrNames roles.default.machines)
               )
             );
