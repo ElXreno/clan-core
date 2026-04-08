@@ -50,7 +50,7 @@ Create the file `./machines/yourmachine/configuration.nix` with the following co
 ```nix
 {
   clan.core.networking.targetHost = "root@ip_or_hostname";
-  nixpkgs.hostPlatform = "aarch64-darwin"; # Use "x86_64-darwin" for Intel-based Macs
+  nixpkgs.hostPlatform = "aarch64-darwin";
 }
 ```
 
