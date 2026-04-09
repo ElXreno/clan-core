@@ -360,34 +360,27 @@ class SecretStore(StoreBase):
         """Encrypt and store a secret to the appropriate machine key(s)."""
         recipients: list[str] = []
 
-        match generator.placement:
-            case PerMachine(machine=machine):
-                if policy.deploy:
-                    self.ensure_machine_key(machine)
-                    recipients = [self.get_machine_pubkey(machine)]
-                else:
-                    # Not deployed: encrypt only to user/admin recipients
-                    # so the machine cannot decrypt it from the nix store.
-                    recipients = self.get_recipients(machine)
-
-            case Shared():
-                if policy.deploy:
-                    # Shared: encrypt to all machines that need this var
-                    for m in policy.deploy:
-                        self.ensure_machine_key(m)
-                    new_recipients = [self.get_machine_pubkey(m) for m in policy.deploy]
-                    # Merge with existing recipients so that per-machine set
-                    # calls accumulate.
-                    existing = self._read_recipients(self.secret_path(generator, name))
-                    recipients = sorted(set(existing + new_recipients))
-                else:
-                    # Not deployed: encrypt only to user/admin recipients
-                    # so no machine can decrypt it from the nix store.
-                    recipients = self.get_recipients(policy.deploy[0])
-
-            case PerExport(_):
-                msg = "PerExport vars are not implemented yet"
+        if policy.deploy:
+            for m in policy.deploy:
+                self.ensure_machine_key(m)
+            recipients = [self.get_machine_pubkey(m) for m in policy.deploy]
+        elif policy.admin_keys:
+            for admin_machine in policy.admin_keys:
+                recipients += self.get_recipients(admin_machine)
+        else:
+            # No machines at all:
+            # try vars.settings.recipients.default
+            recipients_result = self.flake.select(vars_settings_recipients())
+            recipients_config = recipients_result.get("recipients", {})
+            default = recipients_config.get("default", [])
+            if not default:
+                msg = (
+                    f"Cannot encrypt '{name}': no deploy targets, no admin keys, "
+                    f"and no default recipients configured. "
+                    f"Set vars.settings.recipients.default in your clan.nix"
+                )
                 raise ClanError(msg)
+            recipients = default
 
         secret_file = self.secret_path(generator, name)
         secret_file.parent.mkdir(parents=True, exist_ok=True)

@@ -86,7 +86,11 @@ def make_generator(
 
 def policy_for(gen: Generator, var: Var) -> AccessPolicy:
     """Build an AccessPolicy from a generator and var for testing."""
-    return AccessPolicy(gen.key.placement, deploy=var.machines if var.deploy else [])
+    return AccessPolicy(
+        gen.key.placement,
+        deploy=var.machines if var.deploy else [],
+        admin_keys=var.machines,
+    )
 
 
 def make_var(
