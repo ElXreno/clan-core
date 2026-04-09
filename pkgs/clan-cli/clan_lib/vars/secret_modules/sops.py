@@ -182,13 +182,6 @@ class SecretStore(StoreBase):
     def _set(
         self, generator: GeneratorId, name: str, value: bytes, policy: AccessPolicy
     ) -> list[Path]:
-        if not policy.admin_keys:
-            msg = (
-                f"Cannot encrypt '{name}' with SOPS: no machines to resolve groups from. "
-                f"SOPS requires at least one machine for group-based access control."
-            )
-            raise ClanError(msg)
-
         add_machines = policy.deploy
         for m in add_machines:
             self.ensure_machine_key(m)
@@ -196,10 +189,12 @@ class SecretStore(StoreBase):
         # The first machine (whoever that is)
         # Defines the sops.groups for a generator
         # TODO: Resolve this by flake level sops groups
-        first_admin_machine = policy.admin_keys[0]
-        add_groups = self.flake.select(
-            vars_sops_default_groups(current_system(), [first_admin_machine])
-        )[first_admin_machine]["sops"]["defaultGroups"]
+        add_groups: list[str] = []
+        if policy.admin_keys:
+            first_admin_machine = policy.admin_keys[0]
+            add_groups = self.flake.select(
+                vars_sops_default_groups(current_system(), [first_admin_machine])
+            )[first_admin_machine]["sops"]["defaultGroups"]
 
         secret_folder = self.secret_path(generator, name)
         secret_folder.mkdir(parents=True, exist_ok=True)
