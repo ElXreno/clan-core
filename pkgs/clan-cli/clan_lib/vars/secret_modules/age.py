@@ -367,6 +367,8 @@ class SecretStore(StoreBase):
         elif policy.admin_keys:
             for admin_machine in policy.admin_keys:
                 recipients += self.get_recipients(admin_machine)
+            # Multiple machines may resolve to the same admin keys
+            recipients = sorted(set(recipients))
         else:
             # No machines at all:
             # try vars.settings.recipients.default
