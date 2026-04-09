@@ -79,6 +79,11 @@ Placement = Shared | PerMachine | PerExport
 class AccessPolicy:
     placement: Placement
     deploy: list[str]  # Empty if not deployed -> Only Admin key gets access
+    # TODO: This needs to become user based eventually
+    # Currently uses the machine to resolve back to user keys.
+    # That is because there is no user-concept. So we conceptually ask:
+    # Give access to: "admin of webserver" instead of "alice" or "webadmin"
+    admin_keys: list[str]
 
 
 @dataclass(frozen=True)
@@ -298,6 +303,7 @@ class StoreBase(ABC):
                 placement,
                 # TODO: Update how Var class is constructed to eliminate this if statement
                 deploy=var.machines if var.deploy else [],
+                admin_keys=var.machines,
             ),
         )
 
