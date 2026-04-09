@@ -334,7 +334,7 @@ def get_machine_generators(
                 var = Var(
                     id=f"{gen_name}/{file_name}",
                     name=file_name,
-                    machines=[machine_name] if file_data["deploy"] else [],
+                    machines=[machine_name],  # Who declares the var
                     secret=file_data["secret"],
                     deploy=file_data["deploy"],
                     owner=file_data["owner"],
