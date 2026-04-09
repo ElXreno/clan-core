@@ -5,8 +5,7 @@ from pathlib import Path
 from clan_lib.errors import ClanError
 from clan_lib.flake import Flake
 from clan_lib.ssh.host import Host
-from clan_lib.vars._types import GeneratorId, GeneratorStore, StoreBase
-from clan_lib.vars.var import Var
+from clan_lib.vars._types import AccessPolicy, GeneratorId, GeneratorStore, StoreBase
 
 
 class VarsStore(StoreBase):
@@ -24,14 +23,15 @@ class VarsStore(StoreBase):
 
     def _set(
         self,
-        generator: GeneratorStore,
-        var: Var,
+        generator: GeneratorId,
+        name: str,
         value: bytes,
+        policy: AccessPolicy,  # noqa: ARG002
     ) -> list[Path]:
         if not self.flake.is_local:
-            msg = f"Storing var '{var.id}' in a flake is only supported for local flakes: {self.flake}"
+            msg = f"Storing var '{generator} / {name}' in a flake is only supported for local flakes: {self.flake}"
             raise ClanError(msg)
-        folder = self.directory(generator.key, var.name)
+        folder = self.directory(generator, name)
         file_path = folder / "value"
         if folder.exists():
             if not file_path.exists():

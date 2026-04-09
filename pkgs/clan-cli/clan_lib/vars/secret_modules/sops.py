@@ -32,6 +32,7 @@ from clan_lib.nix_selectors import vars_sops_default_groups, vars_sops_secret_up
 from clan_lib.ssh.host import Host
 from clan_lib.ssh.upload import upload
 from clan_lib.vars._types import (
+    AccessPolicy,
     GeneratorId,
     GeneratorStore,
     PerExport,
@@ -39,7 +40,6 @@ from clan_lib.vars._types import (
     Shared,
     StoreBase,
 )
-from clan_lib.vars.var import Var
 
 
 @dataclass
@@ -183,41 +183,38 @@ class SecretStore(StoreBase):
         return None
 
     def _set(
-        self,
-        generator: GeneratorStore,
-        var: Var,
-        value: bytes,
+        self, generator: GeneratorId, name: str, value: bytes, policy: AccessPolicy
     ) -> list[Path]:
         add_machines: list[str] = []
         add_groups: list[str] = []
 
-        match generator.key.placement:
+        match generator.placement:
             case PerMachine(machine=machine):
                 self.ensure_machine_key(machine)
-                add_machines = [machine] if var.deploy else []
+                add_machines = policy.deploy
                 add_groups = self.flake.select(
                     vars_sops_default_groups(current_system(), [machine])
                 )[machine]["sops"]["defaultGroups"]
 
             case Shared():
                 # Shared: add all machines that need this var
-                add_machines = generator.machines if var.deploy else []
+                add_machines = policy.deploy
                 for m in add_machines:
                     self.ensure_machine_key(m)
-                # Use generator.machines[0] for groups even if deploy=False
-                first_machine = generator.machines[0]
+                # Use policy.deploy[0] for groups even if deploy=False
+                first_machine = policy.deploy[0]
                 add_groups = self.flake.select(
                     vars_sops_default_groups(current_system(), [first_machine])
                 )[first_machine]["sops"]["defaultGroups"]
 
             case PerExport(_):
-                add_machines = generator.machines
+                add_machines = policy.deploy
                 for m in add_machines:
                     self.ensure_machine_key(m)
                 # TODO: add the groups feature
                 # add_groups =
 
-        secret_folder = self.secret_path(generator.key, var.name)
+        secret_folder = self.secret_path(generator, name)
         secret_folder.mkdir(parents=True, exist_ok=True)
         encrypt_secret(
             self.clan_dir,

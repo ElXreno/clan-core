@@ -76,6 +76,12 @@ Placement = Shared | PerMachine | PerExport
 
 
 @dataclass(frozen=True)
+class AccessPolicy:
+    placement: Placement
+    deploy: list[str]  # Empty if not deployed -> Only Admin key gets access
+
+
+@dataclass(frozen=True)
 class GeneratorId:
     """Identifies a generator uniquely inside a clan.
 
@@ -168,10 +174,7 @@ class StoreBase(ABC):
 
     @abstractmethod
     def _set(
-        self,
-        generator: "GeneratorStore",
-        var: "Var",
-        value: bytes,
+        self, generator: GeneratorId, name: str, value: bytes, policy: AccessPolicy
     ) -> list[Path]:
         """Override this method to implement the actual creation of the file"""
 
@@ -287,7 +290,16 @@ class StoreBase(ABC):
             old_val_str = "<not set>"
 
         # Call _set this must be overridden
-        new_file = self._set(generator, var, value)
+        new_file = self._set(
+            generator.key,
+            var.name,
+            value,
+            policy=AccessPolicy(
+                placement,
+                # TODO: Update how Var class is constructed to eliminate this if statement
+                deploy=var.machines if var.deploy else [],
+            ),
+        )
 
         # Build a logging string
         action_str = "Migrated" if is_migration else "Updated"

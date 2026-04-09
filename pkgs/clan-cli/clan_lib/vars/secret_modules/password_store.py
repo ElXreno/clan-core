@@ -19,8 +19,7 @@ from clan_lib.nix_selectors import (
 )
 from clan_lib.ssh.host import Host
 from clan_lib.ssh.upload import upload
-from clan_lib.vars._types import GeneratorId, GeneratorStore, StoreBase
-from clan_lib.vars.var import Var
+from clan_lib.vars._types import AccessPolicy, GeneratorId, GeneratorStore, StoreBase
 
 log = logging.getLogger(__name__)
 
@@ -104,11 +103,12 @@ class SecretStore(StoreBase):
 
     def _set(
         self,
-        generator: GeneratorStore,
-        var: Var,
+        generator: GeneratorId,
+        name: str,
         value: bytes,
+        policy: AccessPolicy,  # noqa: ARG002
     ) -> list[Path]:
-        pass_call = ["insert", "-m", str(self.entry_dir(generator.key, var.name))]
+        pass_call = ["insert", "-m", str(self.entry_dir(generator, name))]
         self._run_pass(*pass_call, input=value, check=True)
         return []  # we manage the files outside of the git repo
 

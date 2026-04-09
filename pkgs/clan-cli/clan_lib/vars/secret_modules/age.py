@@ -17,6 +17,7 @@ from clan_lib.nix_selectors import vars_age_secret_location, vars_settings_recip
 from clan_lib.ssh.host import Host
 from clan_lib.ssh.upload import upload
 from clan_lib.vars._types import (
+    AccessPolicy,
     GeneratorId,
     GeneratorStore,
     PerExport,
@@ -24,7 +25,6 @@ from clan_lib.vars._types import (
     Shared,
     StoreBase,
 )
-from clan_lib.vars.var import Var
 
 log = logging.getLogger(__name__)
 
@@ -355,17 +355,14 @@ class SecretStore(StoreBase):
     # ── StoreBase implementation ──────────────────────────────────────────
 
     def _set(
-        self,
-        generator: GeneratorStore,
-        var: Var,
-        value: bytes,
+        self, generator: GeneratorId, name: str, value: bytes, policy: AccessPolicy
     ) -> list[Path]:
         """Encrypt and store a secret to the appropriate machine key(s)."""
         recipients: list[str] = []
 
-        match generator.key.placement:
+        match generator.placement:
             case PerMachine(machine=machine):
-                if var.deploy:
+                if policy.deploy:
                     self.ensure_machine_key(machine)
                     recipients = [self.get_machine_pubkey(machine)]
                 else:
@@ -374,29 +371,25 @@ class SecretStore(StoreBase):
                     recipients = self.get_recipients(machine)
 
             case Shared():
-                if var.deploy:
+                if policy.deploy:
                     # Shared: encrypt to all machines that need this var
-                    for m in generator.machines:
+                    for m in policy.deploy:
                         self.ensure_machine_key(m)
-                    new_recipients = [
-                        self.get_machine_pubkey(m) for m in generator.machines
-                    ]
+                    new_recipients = [self.get_machine_pubkey(m) for m in policy.deploy]
                     # Merge with existing recipients so that per-machine set
                     # calls accumulate.
-                    existing = self._read_recipients(
-                        self.secret_path(generator.key, var.name)
-                    )
+                    existing = self._read_recipients(self.secret_path(generator, name))
                     recipients = sorted(set(existing + new_recipients))
                 else:
                     # Not deployed: encrypt only to user/admin recipients
                     # so no machine can decrypt it from the nix store.
-                    recipients = self.get_recipients(generator.machines[0])
+                    recipients = self.get_recipients(policy.deploy[0])
 
             case PerExport(_):
                 msg = "PerExport vars are not implemented yet"
                 raise ClanError(msg)
 
-        secret_file = self.secret_path(generator.key, var.name)
+        secret_file = self.secret_path(generator, name)
         secret_file.parent.mkdir(parents=True, exist_ok=True)
 
         self._run_age_encrypt(value, recipients, secret_file)
@@ -404,7 +397,7 @@ class SecretStore(StoreBase):
         # Write sidecar recipients file for secrets whose recipients can change:
         # - Shared secrets (machine list can change)
         # - Non-deployed secrets (encrypted to user/admin recipients that can change)
-        if isinstance(generator.key.placement, Shared) or not var.deploy:
+        if isinstance(generator.placement, Shared) or not policy.deploy:
             return [secret_file, self._write_recipients(secret_file, recipients)]
 
         return [secret_file]
