@@ -364,9 +364,9 @@ class SecretStore(StoreBase):
             for m in policy.deploy:
                 self.ensure_machine_key(m)
             recipients = [self.get_machine_pubkey(m) for m in policy.deploy]
-        elif policy.admin_keys:
-            for admin_machine in policy.admin_keys:
-                recipients += self.get_recipients(admin_machine)
+        elif policy.machines:
+            for machine in policy.machines:
+                recipients += self.get_recipients(machine)
             # Multiple machines may resolve to the same admin keys
             recipients = sorted(set(recipients))
         else:

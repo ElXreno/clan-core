@@ -89,7 +89,7 @@ def policy_for(gen: Generator, var: Var) -> AccessPolicy:
     return AccessPolicy(
         gen.key.placement,
         deploy=var.machines if var.deploy else [],
-        admin_keys=var.machines,
+        machines=var.machines,
     )
 
 

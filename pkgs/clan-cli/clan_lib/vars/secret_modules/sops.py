@@ -190,11 +190,11 @@ class SecretStore(StoreBase):
         # Defines the sops.groups for a generator
         # TODO: Resolve this by flake level sops groups
         add_groups: list[str] = []
-        if policy.admin_keys:
-            first_admin_machine = policy.admin_keys[0]
+        if policy.machines:
+            first_machine = policy.machines[0]
             add_groups = self.flake.select(
-                vars_sops_default_groups(current_system(), [first_admin_machine])
-            )[first_admin_machine]["sops"]["defaultGroups"]
+                vars_sops_default_groups(current_system(), [first_machine])
+            )[first_machine]["sops"]["defaultGroups"]
 
         secret_folder = self.secret_path(generator, name)
         secret_folder.mkdir(parents=True, exist_ok=True)
