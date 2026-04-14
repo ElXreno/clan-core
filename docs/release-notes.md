@@ -4,6 +4,77 @@
 
 ## New features
 
+### Post-Quantum Hybrid Age Keys (Opt-In)
+
+Clan-cli can now generate post-quantum hybrid age keys (ML-KEM-768 + X25519 via
+HPKE) for both admin and machine identities, opt-in via a new flake option:
+
+```nix
+clan.vars.settings.age.postQuantum = true;
+```
+
+When enabled, `clan vars keygen`, `clan secrets key generate`, and the
+automatic machine key generation in the sops and age secret backends all call
+`age-keygen -pq` instead of the classical X25519 generator. The resulting
+recipients use the `age1pq1...` Bech32 prefix and identities use
+`AGE-SECRET-KEY-PQ-1...`.
+
+sops-nix decrypts both classical and hybrid identities transparently.
+Encrypted data is protected against future cryptographically-relevant quantum
+computers under the store-now-decrypt-later threat model.
+
+To bootstrap a new PQ-only clan in one step, pass `--post-quantum` to
+`clan init`. This writes `vars.settings.age.postQuantum = true;` into the
+generated `clan.nix` and generates the initial admin key as a hybrid
+identity. The same `--post-quantum` flag is also available on
+`clan secrets key generate` and `clan vars keygen` for generating a PQ key
+without flipping the flake option.
+
+#### Caveats
+
+- **sops backend (default)**: per-recipient independent wraps, so mixing
+  classical and post-quantum recipients on the same file works. Rotation can
+  be incremental, one machine at a time.
+- **age backend** (`secretStore = "age"`): age refuses to mix post-quantum
+  and classical recipients in a single `.age` file because the classical
+  recipient would silently downgrade the PQ user's security. If you use this
+  backend, rotate every recipient of each secret atomically.
+- **Recipient size**: hybrid recipients are roughly 2 KB vs 62 bytes for
+  X25519. Every committed `sops/*/secret` file grows by ~2 KB per recipient,
+  and git diffs are noisier.
+- **No forward secrecy**: like classical age, the hybrid construction is a
+  one-shot KEM, not a ratcheted protocol.
+
+#### Migrating an existing clan (sops backend)
+
+1. Generate a post-quantum admin identity alongside your classical one:
+
+    ```text
+   age-keygen -pq >> ~/.config/sops/age/keys.txt
+    ```
+
+2. Register the new public key on your admin user. This re-encrypts every
+   file the user is a recipient of and commits the result:
+
+    ```text
+   clan secrets users add-key <user> --age-key <pq-pubkey>
+    ```
+
+3. Rotate each machine one at a time. `clan vars fix` regenerates the
+   machine key as a post-quantum hybrid (thanks to the flake option),
+   re-encrypts that machine's vars, and commits. `clan machines update`
+   uploads the new bootstrap age.key to the host before activation:
+
+    ```text
+   rm -rf sops/machines/<M> sops/secrets/<M>-age.key
+   clan vars fix <M>
+   clan machines update <M>
+    ```
+
+4. Once every admin and machine is on post-quantum, optionally remove the
+   classical admin recipient with `clan secrets users remove-key` to drop
+   the classical wrap from every file.
+
 ### New Monitoring Service
 
 Clan now provides a monitoring service based on the grafana stack.

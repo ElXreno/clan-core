@@ -17,6 +17,12 @@ nix run "https://git.clan.lol/clan/clan-core/archive/main.tar.gz#clan-cli" --ref
 
 This downloads the Clan CLI and walks you through creating a new clan project. Enter a name (e.g. `MY-CLAN-1`) and domain (e.g. `myclan1.lol`). Back up the age key when prompted.
 
+:::admonition[Tip]{type=tip}
+Append `--post-quantum` to bootstrap with ML-KEM-768 + X25519 hybrid age keys. This writes
+`vars.settings.age.postQuantum = true;` into your generated `clan.nix` and generates the initial
+admin key as a post-quantum hybrid identity.
+:::
+
 ```bash
 cd MY-CLAN-1
 direnv allow

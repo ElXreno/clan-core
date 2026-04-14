@@ -25,6 +25,18 @@ Below is a [list of popular `age` plugins](https://github.com/FiloSottile/awesom
 
 > **Note:** Plugins marked with 🧪 are experimental. Plugins marked with ⭐️ are official.
 
+:::admonition[Note]{type=note}
+For a native post-quantum hybrid without an external plugin, Clan supports age 1.3.0+ built-in
+hybrid identities (ML-KEM-768 + X25519). Enable it clan-wide with:
+
+```nix
+clan.vars.settings.age.postQuantum = true;
+```
+
+This keeps the identity in the standard `AGE-SECRET-KEY-PQ-1...` format and is decrypted by
+sops-nix out of the box, no additional plugin install required.
+:::
+
 ---
 
 ### Using Plugin-Generated Keys

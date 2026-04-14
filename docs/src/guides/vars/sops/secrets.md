@@ -41,6 +41,19 @@ Make sure to keep a safe backup of the private key you've just created.
 If it's lost, you won't be able to get to your secrets anymore because they all need the admin key to be unlocked.
 :::
 
+:::admonition[Tip]{type=tip}
+Pass `--post-quantum` to generate a ML-KEM-768 + X25519 hybrid key instead of the classical
+X25519 identity:
+
+```bash
+clan secrets key generate --post-quantum
+```
+
+To make the option the default for every key the clan generates (admin keys, machine bootstrap
+keys, and vars-backend machine identities), set `clan.vars.settings.age.postQuantum = true;`
+in your flake. `clan init --post-quantum` bootstraps a new clan with that line already in place.
+:::
+
 If you already have an [age] secret key and want to use that instead, you can simply edit `~/.config/sops/age/keys.txt`:
 
 ```text [~/.config/sops/age/keys.txt]
