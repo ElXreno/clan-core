@@ -32,6 +32,7 @@ in
     ../nixosModules/clanCore/state-version/tests/flake-module.nix
     ../nixosModules/clanCore/vars/tests/flake-module.nix
     ../nixosModules/clanCore/vars/tests/age-test-flake-module.nix
+    ../nixosModules/clanCore/vars/tests/age-pq-test-flake-module.nix
   ];
   flake.check = genAttrs [ "x86_64-linux" "aarch64-darwin" ] (
     system:
@@ -83,6 +84,7 @@ in
 
             # Base Tests
             nixos-test-secrets = self.clanLib.test.baseTest ./secrets nixosTestArgs;
+            nixos-test-secrets-pq = self.clanLib.test.baseTest ./secrets-pq nixosTestArgs;
             nixos-test-wayland-proxy-virtwl = self.clanLib.test.baseTest ./wayland-proxy-virtwl nixosTestArgs;
 
             # Container Tests
@@ -173,6 +175,7 @@ in
           lib.optionalAttrs (pkgs.stdenv.isLinux) {
             # import our test
             nixos-test-secrets = import ./secrets nixosTestArgs;
+            nixos-test-secrets-pq = import ./secrets-pq nixosTestArgs;
             nixos-test-container = import ./container nixosTestArgs;
             # Clan app tests
             nixos-test-app-ocr = self.clanLib.test.baseTest ./app-ocr nixosTestArgs;

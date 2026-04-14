@@ -92,6 +92,8 @@
         "checks/mumble/machines/peer2/facts/mumble-cert"
         "checks/secrets/clan-secrets"
         "checks/secrets/sops/groups/group/machines/machine"
+        "checks/secrets-pq/clan-secrets"
+        "checks/secrets-pq/sops/groups/group/machines/machine"
         "checks/syncthing/introducer/introducer_device_id"
         "checks/syncthing/introducer/introducer_test_api"
         "nixosModules/clanCore/vars/secret/sops/eval-tests/populated/vars/my_machine/my_generator/my_secret"
