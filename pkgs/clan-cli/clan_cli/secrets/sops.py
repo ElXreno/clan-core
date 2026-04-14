@@ -18,7 +18,7 @@ from clan_lib.dirs import runtime_deps_flake, user_config_dir
 from clan_lib.errors import ClanError
 from clan_lib.flake import Flake
 from clan_lib.nix import nix_command, nix_shell
-from clan_lib.nix_selectors import secrets_age_plugins
+from clan_lib.nix_selectors import secrets_age_plugins, vars_settings_age
 
 from .folders import sops_users_folder
 
@@ -232,6 +232,29 @@ def load_age_plugins(flake: Flake) -> list[str]:
     raise ClanError(msg)
 
 
+def is_post_quantum_enabled(flake: Flake | None) -> bool:
+    """Return True when the flake opts in to post-quantum hybrid age keys.
+
+    Reads `clan.vars.settings.age.postQuantum` via the optional
+    `clanInternals.vars.settings.?age` selector. Defaults to False for
+    backwards compatibility, when no flake is available, or when the flake
+    cannot be evaluated (e.g. `clan init --no-update` leaves the flake
+    unlocked and pure-mode eval refuses to fetch inputs).
+    """
+    if flake is None:
+        return False
+    from clan_lib.flake.flake import ClanSelectError  # noqa: PLC0415
+
+    try:
+        result = flake.select(vars_settings_age())
+    except ClanSelectError:
+        return False
+    age_cfg = result.get("age", {})
+    if not isinstance(age_cfg, dict):
+        return False
+    return bool(age_cfg.get("postQuantum", False))
+
+
 def sops_run(
     call: Operation,
     secret_path: Path,
@@ -375,8 +398,18 @@ def get_public_age_key_from_private_key(privkey: str) -> str:
     return res.stdout.rstrip(os.linesep).rstrip()
 
 
-def generate_private_key(out_file: Path | None = None) -> tuple[str, str]:
-    cmd = nix_shell(["age"], ["age-keygen"])
+def generate_private_key(
+    out_file: Path | None = None,
+    post_quantum: bool = False,
+) -> tuple[str, str]:
+    """Generate a new age key pair via `age-keygen`.
+
+    When post_quantum is True, generates a hybrid ML-KEM-768 + X25519 key.
+    """
+    keygen_args = ["age-keygen"]
+    if post_quantum:
+        keygen_args.append("-pq")
+    cmd = nix_shell(["age"], keygen_args)
     try:
         proc = run(cmd)
         res = proc.stdout.strip()
@@ -384,7 +417,7 @@ def generate_private_key(out_file: Path | None = None) -> tuple[str, str]:
         private_key = None
         for line in res.splitlines():
             if line.startswith("# public key:"):
-                pubkey = line.split(":")[1].strip()
+                pubkey = line.split(":", 1)[1].strip()
             if not line.startswith("#"):
                 private_key = line
         if not pubkey:

@@ -14,13 +14,14 @@ from .secrets import update_secrets
 from .sops import (
     default_admin_private_key_path,
     generate_private_key,
+    is_post_quantum_enabled,
     load_age_plugins,
 )
 
 log = logging.getLogger(__name__)
 
 
-def generate_key() -> sops.SopsKey:
+def generate_key(post_quantum: bool = False) -> sops.SopsKey:
     """Generate a new age key and return it as a SopsKey.
 
     This function does not check if the key already exists.
@@ -28,11 +29,14 @@ def generate_key() -> sops.SopsKey:
 
     Use 'check_key_exists' to check if a key already exists.
     Before calling this function if you dont want to generate a new key.
+
+    When post_quantum is True, generates a hybrid ML-KEM-768 + X25519 key.
     """
     path = default_admin_private_key_path()
-    _, pub_key = generate_private_key(out_file=path)
+    _, pub_key = generate_private_key(out_file=path, post_quantum=post_quantum)
+    key_kind = "post-quantum hybrid " if post_quantum else ""
     log.info(
-        f"Generated age private key at '{path}' for your user.\nPlease back it up on a secure location or you will lose access to your secrets.",
+        f"Generated {key_kind}age private key at '{path}' for your user.\nPlease back it up on a secure location or you will lose access to your secrets.",
     )
     return sops.SopsKey(
         pub_key,
@@ -43,9 +47,11 @@ def generate_key() -> sops.SopsKey:
 
 
 def generate_command(args: argparse.Namespace) -> None:
+    flake: Flake | None = getattr(args, "flake", None)
+    post_quantum = args.post_quantum or is_post_quantum_enabled(flake)
     pub_keys = sops.maybe_get_admin_public_keys()
     if not pub_keys or args.new:
-        key = generate_key()
+        key = generate_key(post_quantum=post_quantum)
         pub_keys = [key]
 
     for key in pub_keys:
@@ -108,6 +114,14 @@ def register_key_parser(parser: argparse.ArgumentParser) -> None:
         help=(
             "Generate a new key, without checking if a key already exists. "
             " This will not overwrite an existing key."
+        ),
+        action="store_true",
+    )
+    parser_generate.add_argument(
+        "--post-quantum",
+        help=(
+            "Generate a post-quantum hybrid (ML-KEM-768 + X25519) age key. "
+            "Overrides the `clan.vars.settings.age.postQuantum` flake option"
         ),
         action="store_true",
     )

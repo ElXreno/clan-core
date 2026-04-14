@@ -4,10 +4,14 @@ import sys
 from pathlib import Path
 
 from clan_cli.secrets.key import generate_key
-from clan_cli.secrets.sops import SopsKey, maybe_get_admin_public_keys
+from clan_cli.secrets.sops import (
+    SopsKey,
+    is_post_quantum_enabled,
+    maybe_get_admin_public_keys,
+)
 from clan_cli.secrets.users import add_user
 from clan_lib.api.directory import get_clan_dir
-from clan_lib.flake import Flake  # noqa: TC002
+from clan_lib.flake import Flake
 from clan_lib.vars.keygen import get_user_or_default
 
 log = logging.getLogger(__name__)
@@ -43,6 +47,8 @@ def create_secrets_user_interactive(
     flake_dir: Path,
     user: str | None = None,
     force: bool = False,
+    flake: Flake | None = None,
+    post_quantum: bool = False,
 ) -> None:
     """Initialize sops keys for vars interactively."""
     user = get_user_or_default(user)
@@ -54,7 +60,8 @@ def create_secrets_user_interactive(
         log.info(
             "\nNo admin keys found on this machine, generating a new key for sops.",
         )
-        pub_keys = [generate_key()]
+        pq = post_quantum or is_post_quantum_enabled(flake)
+        pub_keys = [generate_key(post_quantum=pq)]
         # make sure the user backups the generated key
         log.info("\n⚠️  IMPORTANT: Secret Key Backup ⚠️")
         log.info(
@@ -89,12 +96,15 @@ def _create_secrets_user_non_interactive(
     flake_dir: Path,
     user: str | None = None,
     force: bool = False,
+    flake: Flake | None = None,
+    post_quantum: bool = False,
 ) -> None:
     """Initialize sops keys for vars non-interactively."""
     user = get_user_or_default(user)
     pub_keys = maybe_get_admin_public_keys()
     if not pub_keys:
-        pub_keys = [generate_key()]
+        pq = post_quantum or is_post_quantum_enabled(flake)
+        pub_keys = [generate_key(post_quantum=pq)]
     add_user(
         clan_dir=clan_dir,
         name=user,
@@ -110,6 +120,8 @@ def create_secrets_user_auto(
     user: str | None = None,
     force: bool = False,
     interactive: bool | None = None,
+    flake: Flake | None = None,
+    post_quantum: bool = False,
 ) -> None:
     """Detect if the user is in interactive mode or not and choose the appropriate routine.
 
@@ -124,6 +136,8 @@ def create_secrets_user_auto(
             flake_dir=flake_dir,
             user=user,
             force=force,
+            flake=flake,
+            post_quantum=post_quantum,
         )
     else:
         _create_secrets_user_non_interactive(
@@ -131,6 +145,8 @@ def create_secrets_user_auto(
             flake_dir=flake_dir,
             user=user,
             force=force,
+            flake=flake,
+            post_quantum=post_quantum,
         )
 
 
@@ -145,6 +161,8 @@ def _command(
             flake_dir=flake.path,
             user=args.user,
             force=args.force,
+            flake=flake,
+            post_quantum=args.post_quantum,
         )
     else:
         create_secrets_user_auto(
@@ -152,6 +170,8 @@ def _command(
             flake_dir=flake.path,
             user=args.user,
             force=args.force,
+            flake=flake,
+            post_quantum=args.post_quantum,
         )
 
 
@@ -173,6 +193,16 @@ def register_keygen_parser(parser: argparse.ArgumentParser) -> None:
         "--no-interactive",
         help="Run in non-interactive mode, using keys from the machine if available",
         action="store_true",
+    )
+
+    parser.add_argument(
+        "--post-quantum",
+        help=(
+            "Generate a post-quantum hybrid (ML-KEM-768 + X25519) age key. "
+            "Overrides the `clan.vars.settings.age.postQuantum` flake option."
+        ),
+        action="store_true",
+        default=False,
     )
 
     parser.set_defaults(func=_command)

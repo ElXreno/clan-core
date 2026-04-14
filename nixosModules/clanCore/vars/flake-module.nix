@@ -29,6 +29,9 @@ in
       legacyPackages.evalTests-vars-backends = import ./eval-tests/backends.nix {
         inherit lib pkgs;
       };
+      legacyPackages.evalTests-vars-settings-opts = import ./eval-tests/settings-opts.nix {
+        inherit lib;
+      };
       legacyPackages.evalTests-generators-to-sops = import ./secret/sops/generators-to-sops-test.nix {
         inherit lib;
       };
@@ -42,6 +45,11 @@ in
         inherit pkgs system inputOverrides;
         name = "eval-vars-backends";
         flakeAttr = "${varsFileset}#legacyPackages.${system}.evalTests-vars-backends";
+      };
+      legacyPackages.evalCheck-eval-vars-settings-opts = self.clanLib.test.mkEvalCheck {
+        inherit pkgs system inputOverrides;
+        name = "eval-vars-settings-opts";
+        flakeAttr = "${varsFileset}#legacyPackages.${system}.evalTests-vars-settings-opts";
       };
       legacyPackages.evalCheck-eval-generators-to-sops = self.clanLib.test.mkEvalCheck {
         inherit pkgs system inputOverrides;

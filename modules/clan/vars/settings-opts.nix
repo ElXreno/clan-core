@@ -220,6 +220,54 @@ in
       '';
     };
 
+    age = mkOption {
+      type = lib.types.submodule {
+        options = {
+          postQuantum = mkOption {
+            type = bool;
+            default = false;
+            description = ''
+              Generate post-quantum hybrid age keys (ML-KEM-768 + X25519) instead
+              of classical X25519 when clan-cli creates new admin or machine keys.
+
+              Hybrid keys use HPKE with ML-KEM-768 KEM and X25519 as a classical
+              backstop, so an attacker needs to break both algorithms to recover
+              encrypted data. This provides protection against future
+              cryptographically-relevant quantum computers under the
+              store-now-decrypt-later threat model.
+
+              Enabling this flag affects only new key generation; existing
+              classical keys are not rotated. To add a post-quantum key to an
+              existing admin, use `clan secrets users add-key`. To rotate a
+              machine, delete its `sops/machines/<M>` and
+              `sops/secrets/<M>-age.key`, then run `clan vars fix <M>`.
+
+              For the sops backend (default), each recipient's data key is
+              wrapped independently, so mixing classical and post-quantum
+              recipients on the same file is safe and rotation can happen
+              incrementally, one machine at a time.
+
+              For the age backend (`secretStore = "age"`, raw `.age` files),
+              age refuses to mix post-quantum and classical recipients on a
+              single file (error: `incompatible recipients: can't mix
+              post-quantum and classic recipients`), because the classical
+              recipient would silently downgrade the PQ user's security.
+              Rotate every recipient of each secret atomically if you use this
+              backend.
+
+              Tradeoffs: post-quantum recipients are ~2 KB (vs ~62 bytes for
+              X25519), so every committed `sops/*/secret` file grows by roughly
+              that amount per recipient, and git diffs become noisier.
+            '';
+          };
+        };
+      };
+      default = { };
+      description = ''
+        Age key generation settings for clan-cli.
+      '';
+    };
+
   };
 
   config.stores = {

@@ -247,6 +247,11 @@ def vars_settings_recipients() -> str:
     return "clanInternals.vars.settings.?recipients"
 
 
+@static_selector
+def vars_settings_age() -> str:
+    return "clanInternals.vars.settings.?age"
+
+
 @machines_selector
 def vars_settings_age_key_file(system: str, machines: list[str]) -> str:
     prefix = get_machine_prefix()

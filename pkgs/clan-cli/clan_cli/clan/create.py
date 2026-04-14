@@ -5,6 +5,7 @@ from pathlib import Path
 
 from clan_lib.clan.create import CreateOptions, create_clan
 from clan_lib.errors import ClanError
+from clan_lib.flake import Flake
 
 from clan_cli.completions import add_dynamic_completer, complete_templates_clan
 from clan_cli.vars.keygen import create_secrets_user_auto
@@ -79,6 +80,7 @@ def register_create_parser(parser: argparse.ArgumentParser) -> None:
             flake_dir=flake_dir,
             user=args.user,
             force=True,
+            flake=Flake(str(flake_dir)),
         )
 
     parser.set_defaults(func=create_flake_command)

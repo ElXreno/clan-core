@@ -5,6 +5,7 @@ from pathlib import Path
 
 from clan_lib.clan.create import CreateOptions, create_clan
 from clan_lib.errors import ClanError
+from clan_lib.flake import Flake
 
 from clan_cli.completions import add_dynamic_completer, complete_templates_clan
 from clan_cli.vars.keygen import (
@@ -54,6 +55,7 @@ def init_command(args: argparse.Namespace) -> None:
         user=args.user,
         force=True,
         interactive=interactive,
+        flake=Flake(str(flake_dir)),
     )
 
 

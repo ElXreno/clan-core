@@ -3,11 +3,12 @@ import logging
 from pathlib import Path
 
 from clan_cli.secrets.key import generate_key
-from clan_cli.secrets.sops import maybe_get_admin_public_keys
+from clan_cli.secrets.sops import is_post_quantum_enabled, maybe_get_admin_public_keys
 from clan_cli.secrets.users import add_user
 
 from clan_lib.api import API
 from clan_lib.errors import ClanError
+from clan_lib.flake import Flake
 
 log = logging.getLogger(__name__)
 
@@ -29,12 +30,13 @@ def create_secrets_user(
     flake_dir: Path,
     user: str | None = None,
     force: bool = False,
+    flake: Flake | None = None,
 ) -> None:
     """Initialize sops keys for vars"""
     user = get_user_or_default(user)
     pub_keys = maybe_get_admin_public_keys()
     if not pub_keys:
-        pub_keys = [generate_key()]
+        pub_keys = [generate_key(post_quantum=is_post_quantum_enabled(flake))]
     add_user(
         clan_dir=flake_dir,
         name=user,

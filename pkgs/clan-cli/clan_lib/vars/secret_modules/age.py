@@ -7,6 +7,8 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import ClassVar, override
 
+from clan_cli.secrets.sops import is_post_quantum_enabled
+
 from clan_lib.cmd import Log, RunOpts
 from clan_lib.cmd import run as cmd_run
 from clan_lib.errors import ClanCmdError, ClanError
@@ -174,9 +176,12 @@ class SecretStore(StoreBase):
         key_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate keypair
+        keygen_cmd = ["age-keygen"]
+        if is_post_quantum_enabled(self.flake):
+            keygen_cmd.append("-pq")
         try:
             result = cmd_run(
-                ["age-keygen"],
+                keygen_cmd,
                 RunOpts(log=Log.NONE),
             )
         except ClanCmdError as e:

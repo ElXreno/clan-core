@@ -74,7 +74,9 @@ class SecretStore(StoreBase):
 
         if has_machine(self.clan_dir, machine):
             return
-        priv_key, pub_key = sops.generate_private_key()
+        priv_key, pub_key = sops.generate_private_key(
+            post_quantum=sops.is_post_quantum_enabled(self.flake),
+        )
         age_plugins = load_age_plugins(self.flake)
         encrypt_secret(
             self.clan_dir,
