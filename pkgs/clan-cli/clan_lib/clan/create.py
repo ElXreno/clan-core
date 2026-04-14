@@ -96,28 +96,36 @@ def create_clan(opts: CreateOptions) -> InventoryMetaOutput:
     if opts.src_flake is None:
         opts.src_flake = Flake(str(clan_templates()))
 
+    placeholders: dict[str, str] = {}
+    if opts.initial and "name" in opts.initial:
+        placeholders["name"] = opts.initial["name"]
+    else:
+        placeholders["name"] = dest.name
+    if opts.domain:
+        placeholders["domain"] = opts.domain
+    elif opts.initial and "domain" in opts.initial:
+        placeholders["domain"] = opts.initial["domain"]
+    else:
+        placeholders["domain"] = "clan"
+
+    # Substitute placeholders before any post-processing hook runs, so that
+    # hooks which call `nix flake lock` (e.g. the offline test hook) see
+    # syntactically valid Nix.
+    # _postprocess_flake_hook must be private to avoid leaking it to the public API
+    user_hook = opts._postprocess_flake_hook  # noqa: SLF001
+
+    def run_substitution_and_hook(dst: Path) -> None:
+        substitute_clan_placeholders(dst, placeholders)
+        if user_hook is not None:
+            user_hook(dst)
+
     with clan_template(
         opts.src_flake,
         template_ident=opts.template,
         dst_dir=opts.dest,
-        # _postprocess_flake_hook must be private to avoid leaking it to the public API
-        post_process=opts._postprocess_flake_hook,  # noqa: SLF001
+        post_process=run_substitution_and_hook,
     ) as _clan_dir:
         flake = Flake(str(Path(opts.dest).absolute()))
-
-        # Substitute placeholders in clan.nix before git init
-        placeholders: dict[str, str] = {}
-        if opts.initial and "name" in opts.initial:
-            placeholders["name"] = opts.initial["name"]
-        else:
-            placeholders["name"] = dest.name
-        if opts.domain:
-            placeholders["domain"] = opts.domain
-        elif opts.initial and "domain" in opts.initial:
-            placeholders["domain"] = opts.initial["domain"]
-        else:
-            placeholders["domain"] = "clan"
-        substitute_clan_placeholders(dest, placeholders)
 
         if opts.setup_git:
             run(git_command(dest, "init"))
