@@ -160,6 +160,53 @@ def test_create_substitutes_placeholders(
 
 @pytest.mark.broken_on_darwin
 @pytest.mark.with_core
+@pytest.mark.parametrize("template", ["default", "minimal"])
+def test_create_post_quantum_substitution(
+    tmp_path: Path, offline_flake_hook: Any, template: str
+) -> None:
+    """`post_quantum=True` injects `vars.settings.age.postQuantum = true;`
+    into the bootstrapped clan; `post_quantum=False` leaves it absent.
+    """
+    dest_on = tmp_path / "pq_on"
+    create_clan(
+        CreateOptions(
+            dest=dest_on,
+            template=template,
+            domain="clan",
+            post_quantum=True,
+            _postprocess_flake_hook=offline_flake_hook,
+        )
+    )
+
+    dest_off = tmp_path / "pq_off"
+    create_clan(
+        CreateOptions(
+            dest=dest_off,
+            template=template,
+            domain="clan",
+            _postprocess_flake_hook=offline_flake_hook,
+        )
+    )
+
+    def read_all(d: Path) -> str:
+        buf = ""
+        for fn in ("clan.nix", "flake.nix"):
+            p = d / fn
+            if p.exists():
+                buf += p.read_text()
+        return buf
+
+    on_content = read_all(dest_on)
+    off_content = read_all(dest_off)
+
+    assert "{{postQuantumOption}}" not in on_content
+    assert "{{postQuantumOption}}" not in off_content
+    assert "vars.settings.age.postQuantum = true;" in on_content
+    assert "vars.settings.age.postQuantum = true;" not in off_content
+
+
+@pytest.mark.broken_on_darwin
+@pytest.mark.with_core
 def test_minimal_can_be_modified_by_api(
     tmp_path: Path, offline_flake_hook: Any
 ) -> None:

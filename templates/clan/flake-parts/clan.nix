@@ -2,6 +2,7 @@
   # Ensure this is unique among all clans you want to use.
   meta.name = "{{name}}";
   meta.domain = "{{domain}}";
+  # {{postQuantumOption}}
 
   inventory.machines = {
     # Define machines here.

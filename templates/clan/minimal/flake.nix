@@ -12,6 +12,7 @@
         # Setting a name is required
         meta.name = inputs.nixpkgs.lib.mkDefault "{{name}}";
         meta.domain = inputs.nixpkgs.lib.mkDefault "{{domain}}";
+        # {{postQuantumOption}}
       };
     in
     {

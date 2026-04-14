@@ -46,6 +46,7 @@ def init_command(args: argparse.Namespace) -> None:
             src_flake=args.flake,
             update_clan=not args.no_update,
             domain=args.domain,
+            post_quantum=args.post_quantum,
         ),
     )
     flake_dir = Path(args.name).resolve()
@@ -56,6 +57,7 @@ def init_command(args: argparse.Namespace) -> None:
         force=True,
         interactive=interactive,
         flake=Flake(str(flake_dir)),
+        post_quantum=args.post_quantum,
     )
 
 
@@ -108,6 +110,18 @@ def register_parser(parser: argparse.ArgumentParser) -> None:
         "--user",
         help="The user to generate the keys for. Default: logged-in OS username (e.g. from $LOGNAME or system)",
         default=None,
+    )
+
+    parser.add_argument(
+        "--post-quantum",
+        help=(
+            "Bootstrap the clan with post-quantum hybrid age keys "
+            "(ML-KEM-768 + X25519). Writes "
+            "`vars.settings.age.postQuantum = true;` into the new clan.nix "
+            "and generates the initial admin key as a hybrid identity."
+        ),
+        action="store_true",
+        default=False,
     )
 
     parser.set_defaults(func=init_command)

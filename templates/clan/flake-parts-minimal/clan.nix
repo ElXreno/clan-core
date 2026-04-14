@@ -6,5 +6,6 @@
   clan = {
     meta.name = "{{name}}";
     meta.domain = "{{domain}}";
+    # {{postQuantumOption}}
   };
 }

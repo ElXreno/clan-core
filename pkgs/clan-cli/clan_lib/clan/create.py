@@ -28,6 +28,7 @@ def substitute_clan_placeholders(clan_dir: Path, values: dict[str, str]) -> None
             continue
         content = nix_file.read_text()
         for name, value in values.items():
+            content = content.replace("# {{" + name + "}}", value)
             content = content.replace("{{" + name + "}}", value)
         nix_file.write_text(content)
 
@@ -42,6 +43,7 @@ class CreateOptions:
     initial: InventoryMetaInput | None = None
     update_clan: bool = True
     domain: str | None = None
+    post_quantum: bool = False
 
     # -- Internal use only --
     #
@@ -107,6 +109,9 @@ def create_clan(opts: CreateOptions) -> InventoryMetaOutput:
         placeholders["domain"] = opts.initial["domain"]
     else:
         placeholders["domain"] = "clan"
+    placeholders["postQuantumOption"] = (
+        "vars.settings.age.postQuantum = true;" if opts.post_quantum else ""
+    )
 
     # Substitute placeholders before any post-processing hook runs, so that
     # hooks which call `nix flake lock` (e.g. the offline test hook) see

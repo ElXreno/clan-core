@@ -51,6 +51,18 @@ def register_create_parser(parser: argparse.ArgumentParser) -> None:
         default=None,
     )
 
+    parser.add_argument(
+        "--post-quantum",
+        help=(
+            "Bootstrap the clan with post-quantum hybrid age keys "
+            "(ML-KEM-768 + X25519). Writes "
+            "`vars.settings.age.postQuantum = true;` into the new clan.nix "
+            "and generates the initial admin key as a hybrid identity."
+        ),
+        action="store_true",
+        default=False,
+    )
+
     def create_flake_command(args: argparse.Namespace) -> None:
         log.warning(
             "DEPRECATED: 'clan flakes create' is deprecated and will be removed "
@@ -72,6 +84,7 @@ def register_create_parser(parser: argparse.ArgumentParser) -> None:
                 setup_git=not args.no_git,
                 src_flake=args.flake,
                 update_clan=not args.no_update,
+                post_quantum=args.post_quantum,
             ),
         )
         flake_dir = Path(args.name).resolve()
@@ -81,6 +94,7 @@ def register_create_parser(parser: argparse.ArgumentParser) -> None:
             user=args.user,
             force=True,
             flake=Flake(str(flake_dir)),
+            post_quantum=args.post_quantum,
         )
 
     parser.set_defaults(func=create_flake_command)
