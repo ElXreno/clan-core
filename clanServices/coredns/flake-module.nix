@@ -7,4 +7,8 @@ in
     coredns = module;
     "@clan/coredns" = module;
   };
+  clan.deprecatedModules = [
+    "coredns"
+    "@clan/coredns"
+  ];
 }
