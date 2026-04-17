@@ -21,7 +21,8 @@ get a certificate from `ca` which is valid inside your clan. The machine
 `client` will trust this certificate if it makes a request to
 `https://something.foo`.
 
-This clan service can be combined with the `coredns` service for easy to deploy,
+This clan service can be combined with the `coredns` service from
+[clan-community](https://git.clan.lol/clan/clan-community) for easy to deploy,
 SSL secured clan-internal service hosting.
 
 ```nix
