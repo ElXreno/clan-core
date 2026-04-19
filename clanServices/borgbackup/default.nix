@@ -278,7 +278,10 @@
                   );
                   exclude = settings.exclude;
                   repo = dest.repo;
-                  environment.BORG_RSH = dest.rsh;
+                  environment = {
+                    BORG_RSH = dest.rsh;
+                    BORG_RELOCATED_REPO_ACCESS_IS_OK = "yes";
+                  };
                   compression = "auto,zstd";
                   startAt = settings.startAt;
                   persistentTimer = true;
