@@ -39,7 +39,7 @@ def generate_key() -> sops.SopsKey:
     with path.open("a") as f:
         f.write(f"# public key: {pub_key}\n{private_key}\n")
     log.info(
-        f"Generated age private key at '{path}' for your user.\nPlease back it up on a secure location or you will lose access to your secrets.",
+        f"Generated post-quantum hybrid age private key at '{path}' for your user.\nPlease back it up on a secure location or you will lose access to your secrets.",
     )
     return sops.SopsKey(
         pub_key,
