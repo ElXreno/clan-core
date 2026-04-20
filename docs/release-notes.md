@@ -4,6 +4,52 @@
 
 ## New features
 
+### Post-Quantum Hybrid Age Keys by Default
+
+`clan-cli` now generates post-quantum hybrid age keys (ML-KEM-768 + X25519)
+via `age-keygen -pq`. New admin and machine identities use the `age1pq1...`
+Bech32 prefix.
+
+`sops-nix` decrypts classical and hybrid identities transparently, so
+existing classical keys keep working. When `clan` commands that touch
+secrets (`vars generate|fix|check|upload`, `secrets key generate`,
+`secrets users add-key`, `machines update|install`) detect classical
+recipients in the flake, they print a one-time warning pointing to the
+migration steps below.
+
+The age backend (`secretStore = "age"`) refuses to mix PQ and classical
+recipients in a single file; rotate all recipients atomically if you use
+that backend.
+
+#### Migrating an existing clan
+
+1. Generate a post-quantum admin identity alongside your classical one:
+
+    ```text
+    age-keygen -pq >> ~/.config/sops/age/keys.txt
+    ```
+
+2. Register the new public key on your admin user:
+
+    ```text
+    clan secrets users add-key <user> --age-key <pq-pubkey>
+    ```
+
+3. Rotate each machine's key:
+
+    ```text
+    rm -rf sops/machines/<M> sops/secrets/<M>-age.key
+    clan vars fix <M>
+    clan machines update <M>
+    ```
+
+4. Remove the classical admin recipient once every user and machine is on
+   post-quantum:
+
+    ```text
+    clan secrets users remove-key <user> --age-key <classical-pubkey>
+    ```
+
 ### New Monitoring Service
 
 Clan now provides a monitoring service based on the grafana stack.
