@@ -136,6 +136,7 @@ export const docsNav: DocsNavItems = [
           "guides/migrations/migrate-admin-service",
           "guides/migrations/migrate-inventory-services",
           "guides/migrations/migration-facts-vars",
+          "guides/migrations/migrate-to-post-quantum-age",
           "guides/migrations/disk-id",
         ],
       },
