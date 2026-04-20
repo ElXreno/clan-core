@@ -883,6 +883,9 @@ class Flake:
         return self._path
 
     def load_cache(self) -> None:
+        if os.environ.get("CLAN_NO_SELECT_DISK_CACHE") == "1":
+            log.debug("Skipping select cache load (CLAN_NO_SELECT_DISK_CACHE=1)")
+            return
         path = self.flake_cache_path
         if path is None or self._cache is None or not path.exists():
             return
@@ -1101,7 +1104,7 @@ class Flake:
         self.load_cache()
         for i, selector in enumerate(selectors):
             self._cache.insert(outputs[i], selector)
-        if self.flake_cache_path:
+        if self.flake_cache_path and os.environ.get("CLAN_NO_SELECT_DISK_CACHE") != "1":
             self._cache.save_to_file(self.flake_cache_path)
 
     def precache(self, selectors: list[str]) -> None:

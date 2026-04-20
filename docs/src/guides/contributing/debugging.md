@@ -82,6 +82,7 @@ You can enable more detailed logging for specific components by setting these en
 - `CLAN_DEBUG_NIX_SELECTORS=1`: verbose logs for flake.select operations
 - `CLAN_DEBUG_NIX_PREFETCH=1`: verbose logs for flake.prefetch operations
 - `CLAN_DEBUG_COMMANDS=1`: print the diffed environment of executed commands
+- `CLAN_NO_SELECT_DISK_CACHE=1`: don't use the on-disk select cache (only in-memory cache)
 
 Example:
 
