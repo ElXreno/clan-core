@@ -295,8 +295,11 @@ in
             }
             (
               { ... }:
+              let
+                deprecated = clan-core.clan.deprecatedModules or [ ];
+              in
               {
-                staticModules = clan-core.clan.modules;
+                staticModules = lib.filterAttrs (name: _: !(lib.elem name deprecated)) clan-core.clan.modules;
               }
             )
           ];

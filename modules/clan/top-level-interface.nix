@@ -187,6 +187,18 @@ in
       '';
     };
 
+    deprecatedModules = lib.mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = ''
+        Names of entries in `clan.modules` that are migration stubs for removed
+        services. The module stays registered so that users who still reference
+        it get a helpful error via the inventory resolver, but eager consumers
+        (docs generation, schema generation, CLI service listings) skip it
+        instead of triggering the stub's `throw`.
+      '';
+    };
+
     templates = lib.mkOption {
       type = types.submodule { imports = [ ./templates.nix ]; };
       default = { };

@@ -130,9 +130,11 @@ in
       default =
         let
           inputsWithModules = lib.filterAttrs (_inputName: v: v ? clan.modules) config.flakeInputs;
+          activeModules =
+            v: lib.filterAttrs (name: _: !(lib.elem name (v.clan.deprecatedModules or [ ]))) v.clan.modules;
         in
         lib.mapAttrs (
-          inputName: v: lib.mapAttrs (inspectModule inputName) v.clan.modules
+          inputName: v: lib.mapAttrs (inspectModule inputName) (activeModules v)
         ) inputsWithModules;
     };
     moduleSchemas = lib.mkOption {
@@ -142,6 +144,8 @@ in
       default =
         let
           inputsWithModules = lib.filterAttrs (_inputName: v: v ? clan.modules) config.flakeInputs;
+          activeModules =
+            v: lib.filterAttrs (name: _: !(lib.elem name (v.clan.deprecatedModules or [ ]))) v.clan.modules;
         in
         lib.mapAttrs (
           inputName: v:
@@ -156,7 +160,7 @@ in
                 moduleName
               ];
             }).config.result.api.schema
-          ) v.clan.modules
+          ) (activeModules v)
         ) inputsWithModules;
     };
     templatesPerSource = lib.mkOption {
