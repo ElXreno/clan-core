@@ -10,7 +10,6 @@ from clan_lib.errors import ClanCmdError, ClanError
 from clan_lib.machines.machines import Machine
 from clan_lib.nix import current_system, nix_build, nix_test_store
 from clan_lib.sandbox_exec import sandbox_cmd, sandbox_works
-from clan_lib.vars.generate import run_generators
 from clan_lib.vars.generator import get_machine_generators
 
 log = logging.getLogger(__name__)
@@ -93,7 +92,7 @@ def _hostplatform_unset_hint(machine: Machine, build_format: str) -> str:
     return (
         f"Machine '{machine.name}' does not set nixpkgs.hostPlatform.\n\n"
         "Either set it in the machine's configuration, e.g.:\n"
-        '    nixpkgs.hostPlatform = "x86_64-linux";\n\n'
+        f'    nixpkgs.hostPlatform = "{current_system()}";\n\n'
         "Or pass --system explicitly, e.g.:\n"
         f"    clan machines build {machine.name}{format_arg} --system {current_system()}"
     )
@@ -229,13 +228,6 @@ def build_machine(
     """
     if options is None:
         options = BuildOptions()
-
-    run_generators(
-        [machine],
-        generators=None,
-        full_closure=False,
-        no_sandbox=not options.use_sandbox,
-    )
 
     build_target = get_build_target(machine, options.format, system=options.system)
     nix_options = machine.flake.nix_options or []

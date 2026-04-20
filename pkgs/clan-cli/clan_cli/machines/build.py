@@ -11,6 +11,7 @@ from clan_lib.machines.build import BuildOptions, BuildResult, build_machine
 from clan_lib.machines.list import instantiate_inventory_to_machines
 from clan_lib.machines.machines import Machine
 from clan_lib.machines.suggestions import validate_machine_names
+from clan_lib.vars.generate import run_generators
 
 from clan_cli.completions import (
     add_dynamic_completer,
@@ -97,6 +98,8 @@ def build_command(args: argparse.Namespace) -> None:
 
         build_outputs: list[BuildResult] = []
         errors: dict[str, Exception] = {}
+
+        run_generators(machines_to_build, full_closure=False)
 
         with AsyncRuntime() as runtime:
             futures = []
