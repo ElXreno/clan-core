@@ -8,6 +8,7 @@ from clan_lib.api.directory import get_clan_dir
 from clan_lib.errors import ClanError
 from clan_lib.flake import Flake  # noqa: TC002
 from clan_lib.git import commit_files
+from clan_lib.vars.classical_keys import warn_if_classical_recipients
 
 from . import sops
 from .secrets import update_secrets
@@ -64,6 +65,7 @@ def _print_add_instructions(key: sops.SopsKey) -> None:
 
 def generate_command(args: argparse.Namespace) -> None:
     flake: Flake | None = args.flake
+    warn_if_classical_recipients(flake)
     pub_keys = sops.maybe_get_admin_public_keys()
     if not pub_keys or args.new:
         # A freshly generated key is never registered yet, so always guide the
