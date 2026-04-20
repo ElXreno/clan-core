@@ -96,6 +96,7 @@ def nix_config() -> dict[str, Any]:
     return config
 
 
+@cache
 def current_system() -> str:
     """The (nix) system of the machine where this code is executed"""
     config = nix_config()

@@ -11,6 +11,7 @@ from clan_lib.machines.build import BuildOptions, BuildResult, build_machine
 from clan_lib.machines.list import instantiate_inventory_to_machines
 from clan_lib.machines.machines import Machine
 from clan_lib.machines.suggestions import validate_machine_names
+from clan_lib.vars.generate import run_generators
 
 from clan_cli.completions import (
     add_dynamic_completer,
@@ -92,10 +93,13 @@ def build_command(args: argparse.Namespace) -> None:
             no_link=args.no_link,
             no_secrets=args.no_secrets,
             use_sandbox=not args.no_sandbox,
+            system=args.system,
         )
 
         build_outputs: list[BuildResult] = []
         errors: dict[str, Exception] = {}
+
+        run_generators(machines_to_build, full_closure=False)
 
         with AsyncRuntime() as runtime:
             futures = []
@@ -186,6 +190,13 @@ def register_build_parser(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Disable sandboxing when executing generators and image scripts. WARNING: potentially executing untrusted code from external clan modules.",
         default=False,
+    )
+
+    parser.add_argument(
+        "--system",
+        type=str,
+        default=None,
+        help="Target system to build for (e.g. 'x86_64-linux', 'aarch64-linux'). Routes the build through clanInternals.machines.<system>.<name>, which mkForces nixpkgs.hostPlatform to <system>. Use for installer-style machines that don't pin nixpkgs.hostPlatform; for normal machines, omit and let the machine's own hostPlatform win.",
     )
 
     parser.set_defaults(func=build_command)

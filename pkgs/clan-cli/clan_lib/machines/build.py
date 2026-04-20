@@ -6,11 +6,10 @@ from tempfile import TemporaryDirectory
 
 from clan_lib.async_run import is_async_cancelled
 from clan_lib.cmd import run
-from clan_lib.errors import ClanError
+from clan_lib.errors import ClanCmdError, ClanError
 from clan_lib.machines.machines import Machine
 from clan_lib.nix import current_system, nix_build, nix_test_store
 from clan_lib.sandbox_exec import sandbox_cmd, sandbox_works
-from clan_lib.vars.generate import run_generators
 from clan_lib.vars.generator import get_machine_generators
 
 log = logging.getLogger(__name__)
@@ -34,10 +33,25 @@ class BuildOptions:
     no_link: bool = False
     no_secrets: bool = False
     use_sandbox: bool = True
+    # When set, route via clanInternals.machines."<system>"."<name>" instead
+    # of {nixos,darwin}Configurations."<name>". The per-system attr injects
+    # the overridePkgs module which mkForces nixpkgs.hostPlatform and
+    # nixpkgs.pkgs to <system>; needed for installer-style machines that
+    # don't pin nixpkgs.hostPlatform themselves.
+    system: str | None = None
 
 
-def get_build_target(machine: Machine, build_format: str) -> str:
+def get_build_target(
+    machine: Machine, build_format: str, system: str | None = None
+) -> str:
     """Get the nix build target for a machine.
+
+    Default path: {nixos,darwin}Configurations."<name>", so the machine's
+    own nixpkgs.hostPlatform wins.
+
+    With ``system`` set: clanInternals.machines."<system>"."<name>", which
+    carries an overridePkgs module that forces nixpkgs.hostPlatform. Use
+    this for machines that don't pin a hostPlatform (e.g. installers).
 
     Special cases:
     - toplevel: config.system.build.toplevel
@@ -48,13 +62,40 @@ def get_build_target(machine: Machine, build_format: str) -> str:
         if not machine.flake.is_local
         else str(machine.flake.path)
     )
-    system = current_system()
 
-    if build_format == "toplevel":
-        return f'{flake_ref}#clanInternals.machines."{system}"."{machine.name}".config.system.build.toplevel'
+    suffix = (
+        "config.system.build.toplevel"
+        if build_format == "toplevel"
+        else f"config.system.build.images.{build_format}"
+    )
 
-    # For all other formats, use config.system.build.images.{format}
-    return f'{flake_ref}#clanInternals.machines."{system}"."{machine.name}".config.system.build.images.{build_format}'
+    if system is not None:
+        return (
+            f'{flake_ref}#clanInternals.machines."{system}"."{machine.name}".{suffix}'
+        )
+
+    configurations_attr = f"{machine._class_}Configurations"
+    return f'{flake_ref}#{configurations_attr}."{machine.name}".{suffix}'
+
+
+# Substring uniquely emitted by nixpkgs when nixpkgs.hostPlatform has no
+# definition. Probing this option directly via flake.select doesn't work
+# because the assertion fires on bare `options`/`config` access too, so we
+# detect it post-hoc on the build's stderr instead.
+_HOSTPLATFORM_UNSET_MARKER = (
+    "Neither nixpkgs.hostPlatform nor the legacy option nixpkgs.system has been set"
+)
+
+
+def _hostplatform_unset_hint(machine: Machine, build_format: str) -> str:
+    format_arg = f" --format {build_format}" if build_format != "toplevel" else ""
+    return (
+        f"Machine '{machine.name}' does not set nixpkgs.hostPlatform.\n\n"
+        "Either set it in the machine's configuration, e.g.:\n"
+        f'    nixpkgs.hostPlatform = "{current_system()}";\n\n'
+        "Or pass --system explicitly, e.g.:\n"
+        f"    clan machines build {machine.name}{format_arg} --system {current_system()}"
+    )
 
 
 def _is_image_format(build_format: str) -> bool:
@@ -188,14 +229,7 @@ def build_machine(
     if options is None:
         options = BuildOptions()
 
-    run_generators(
-        [machine],
-        generators=None,
-        full_closure=False,
-        no_sandbox=not options.use_sandbox,
-    )
-
-    build_target = get_build_target(machine, options.format)
+    build_target = get_build_target(machine, options.format, system=options.system)
     nix_options = machine.flake.nix_options or []
 
     build_flags = [build_target, *nix_options]
@@ -211,7 +245,14 @@ def build_machine(
 
     cmd = nix_build(build_flags)
 
-    proc = run(cmd)
+    try:
+        proc = run(cmd)
+    except ClanCmdError as e:
+        if options.system is None and _HOSTPLATFORM_UNSET_MARKER in (
+            e.cmd.stderr or ""
+        ):
+            raise ClanError(_hostplatform_unset_hint(machine, options.format)) from e
+        raise
 
     if is_async_cancelled():
         msg = "Build cancelled"
