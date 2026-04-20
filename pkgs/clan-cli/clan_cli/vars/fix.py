@@ -3,11 +3,13 @@ import argparse
 from clan_cli.completions import add_dynamic_completer, complete_machines
 from clan_lib.flake import require_flake
 from clan_lib.machines.list import list_full_machines
+from clan_lib.vars.classical_keys import warn_if_classical_recipients
 from clan_lib.vars.fix import fix_vars
 
 
 def fix_command(args: argparse.Namespace) -> None:
     flake = require_flake(args.flake)
+    warn_if_classical_recipients(flake)
     machines = list(list_full_machines(flake).values())
 
     if len(args.machines) > 0:
