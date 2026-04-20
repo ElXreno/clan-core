@@ -32,7 +32,7 @@ def generate_key() -> sops.SopsKey:
     path = default_admin_private_key_path()
     _, pub_key = generate_private_key(out_file=path)
     log.info(
-        f"Generated age private key at '{path}' for your user.\nPlease back it up on a secure location or you will lose access to your secrets.",
+        f"Generated post-quantum hybrid age private key at '{path}' for your user.\nPlease back it up on a secure location or you will lose access to your secrets.",
     )
     return sops.SopsKey(
         pub_key,
