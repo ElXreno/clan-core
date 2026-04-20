@@ -22,6 +22,7 @@ from clan_lib.nix_selectors import (
 from clan_lib.ssh.host_key import HostKeyCheck
 from clan_lib.ssh.localhost import LocalHost
 from clan_lib.ssh.remote import Remote
+from clan_lib.vars.classical_keys import warn_if_classical_recipients
 from clan_lib.vars.generate import run_generators
 from clan_lib.vars.generator import get_machine_selectors
 
@@ -169,6 +170,7 @@ def update_command(args: argparse.Namespace) -> None:
         os.environ["NIXOS_NO_CHECK"] = "1"
     try:
         flake = require_flake(args.flake)
+        warn_if_classical_recipients(flake)
         machines_to_update = get_machines_for_update(flake, args.machines, args.tags)
 
         if args.target_host is not None and len(machines_to_update) > 1:

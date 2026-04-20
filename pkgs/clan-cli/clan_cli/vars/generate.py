@@ -8,6 +8,7 @@ from clan_cli.completions import (
 )
 from clan_lib.flake import require_flake
 from clan_lib.machines.list import list_full_machines
+from clan_lib.vars.classical_keys import warn_if_classical_recipients
 from clan_lib.vars.generate import run_generators
 
 if TYPE_CHECKING:
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
 
 def generate_command(args: argparse.Namespace) -> None:
     flake = require_flake(args.flake)
+    warn_if_classical_recipients(flake)
     machines: list[Machine] = list(list_full_machines(flake).values())
 
     if len(args.machines) > 0:
