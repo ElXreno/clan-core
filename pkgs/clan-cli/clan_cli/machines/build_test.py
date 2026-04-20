@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 from clan_lib.errors import ClanError
 from clan_lib.flake import Flake
+from clan_lib.machines.build import BuildOptions, build_machine
+from clan_lib.machines.machines import Machine
 
 from clan_cli.machines.build import get_machines_for_build
 from clan_cli.tests.fixtures_flakes import FlakeForTest
@@ -94,3 +96,38 @@ def test_build_command_no_flake(
 
     with pytest.raises(ClanError):
         cli.run(["machines", "build", "machine1"])
+
+
+@pytest.mark.parametrize(
+    "test_flake_with_core",
+    [
+        {
+            # 'jon' is added only via the inventory with no per-machine NixOS
+            # module, so it inherits no nixpkgs.hostPlatform — this reproduces
+            # the installer-style failure mode.
+            "inventory_expr": r"""{
+                machines.jon = {};
+            }""",
+        },
+    ],
+    indirect=["test_flake_with_core"],
+)
+@pytest.mark.broken_on_darwin
+@pytest.mark.with_core
+def test_build_machine_without_hostplatform_raises_friendly_error(
+    test_flake_with_core: FlakeForTest,
+) -> None:
+    """Rewrite the missing-hostPlatform build error into a friendly hint.
+
+    Points the user at --system as the recovery.
+    """
+    flake = Flake(str(test_flake_with_core.path))
+    machine = Machine(name="jon", flake=flake)
+
+    with pytest.raises(ClanError) as exc_info:
+        build_machine(machine, BuildOptions(no_link=True))
+
+    msg = str(exc_info.value)
+    assert "nixpkgs.hostPlatform" in msg
+    assert "--system" in msg
+    assert "jon" in msg
