@@ -19,6 +19,7 @@
       networking.hostName = "machine";
     };
   testScript = ''
+    machine.succeed("grep -q '^AGE-SECRET-KEY-PQ-1' /etc/privkey.age")
     machine.succeed("cat /etc/secret >&2")
     machine.succeed("cat /etc/group-secret >&2")
     machine.succeed('[ "$(cat /etc/secret-sops-file)" != "$(cat /etc/secret-sops-file-legacy)" ]')
