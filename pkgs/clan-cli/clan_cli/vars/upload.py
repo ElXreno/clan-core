@@ -5,11 +5,13 @@ from clan_cli.completions import add_dynamic_completer, complete_machines
 from clan_lib.flake import require_flake
 from clan_lib.machines.machines import Machine
 from clan_lib.network.network import get_best_remote
+from clan_lib.vars.classical_keys import warn_if_classical_recipients
 from clan_lib.vars.upload import populate_secret_vars, upload_secret_vars
 
 
 def upload_command(args: argparse.Namespace) -> None:
     flake = require_flake(args.flake)
+    warn_if_classical_recipients(flake)
     machine = Machine(name=args.machine, flake=flake)
     directory = None
     if args.directory:

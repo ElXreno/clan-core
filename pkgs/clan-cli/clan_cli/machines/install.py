@@ -16,6 +16,7 @@ from clan_lib.network.network import NoRemoteError, get_best_remote
 from clan_lib.network.qr_code import read_qr_image, read_qr_json
 from clan_lib.ssh.host_key import HostKeyCheck
 from clan_lib.ssh.remote import Remote
+from clan_lib.vars.classical_keys import warn_if_classical_recipients
 
 from clan_cli.completions import (
     add_dynamic_completer,
@@ -154,6 +155,7 @@ def get_hardware_config(machine: Machine, args: argparse.Namespace) -> HardwareC
 def install_command(args: argparse.Namespace) -> None:
     try:
         flake = require_flake(args.flake)
+        warn_if_classical_recipients(flake)
         # Only if the caller did not specify a target_host via args.target_host
         # Find a suitable target_host that is reachable
         with ExitStack() as stack:

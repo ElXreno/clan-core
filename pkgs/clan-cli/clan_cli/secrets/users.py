@@ -9,6 +9,7 @@ from clan_lib.api.directory import get_clan_dir
 from clan_lib.errors import ClanError
 from clan_lib.flake import Flake, require_flake
 from clan_lib.git import commit_files
+from clan_lib.vars.classical_keys import warn_if_classical_recipients
 
 from . import groups, secrets, sops
 from .filters import get_secrets_filter_for_user
@@ -266,6 +267,7 @@ def remove_secret_command(args: argparse.Namespace) -> None:
 
 def add_key_command(args: argparse.Namespace) -> None:
     flake: Flake = require_flake(args.flake)
+    warn_if_classical_recipients(flake)
     clan_dir = get_clan_dir(flake)
     add_user_key(
         clan_dir,
