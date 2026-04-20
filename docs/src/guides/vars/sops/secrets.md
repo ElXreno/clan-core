@@ -27,13 +27,18 @@ Don't worry — if you've already made one before, this step won't change or ove
 clan secrets key generate
 ```
 
+This generates a post-quantum hybrid identity (ML-KEM-768 + X25519). The
+resulting recipient starts with `age1pq1...` and the private key with
+`AGE-SECRET-KEY-PQ-1...`. `sops-nix` decrypts both hybrid and classical
+identities transparently.
+
 **Output**:
 
 ```console
-Public key: age1wkth7uhpkl555g40t8hjsysr20drq286netu8zptw50lmqz7j95sw2t3l7
+Public key: age1pq1qqqs6...
 
-Generated age private key at '/home/joerg/.config/sops/age/keys.txt' for your user. Please back it up on a secure location or you will lose access to your secrets.
-Also add your age public key to the repository with 'clan secrets users add YOUR_USER age1wkth7uhpkl555g40t8hjsysr20drq286netu8zptw50lmqz7j95sw2t3l7' (replace YOUR_USER with your actual username)
+Generated post-quantum hybrid age private key at '/home/joerg/.config/sops/age/keys.txt' for your user. Please back it up on a secure location or you will lose access to your secrets.
+Also add your age public key to the repository with 'clan secrets users add YOUR_USER age1pq1qqqs6...' (replace YOUR_USER with your actual username)
 ```
 
 :::admonition[Warning]{type=warning}
