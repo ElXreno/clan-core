@@ -176,7 +176,7 @@ class SecretStore(StoreBase):
         # Generate keypair
         try:
             result = cmd_run(
-                ["age-keygen"],
+                ["age-keygen", "-pq"],
                 RunOpts(log=Log.NONE),
             )
         except ClanCmdError as e:

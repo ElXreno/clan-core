@@ -376,7 +376,7 @@ def get_public_age_key_from_private_key(privkey: str) -> str:
 
 
 def generate_private_key(out_file: Path | None = None) -> tuple[str, str]:
-    cmd = nix_shell(["age"], ["age-keygen"])
+    cmd = nix_shell(["age"], ["age-keygen", "-pq"])
     try:
         proc = run(cmd)
         res = proc.stdout.strip()
