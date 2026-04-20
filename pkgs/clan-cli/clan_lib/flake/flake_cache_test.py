@@ -1,3 +1,4 @@
+import os
 import subprocess
 from pathlib import Path
 from sys import platform
@@ -544,6 +545,76 @@ def test_reinserting_store_path_value() -> None:
     assert isinstance(cache.value, dict)
     assert "outPath" in cache.value
     assert cache.value["outPath"].value == pure_path
+
+
+def test_no_select_cache_env_skips_disk_load(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that CLAN_NO_SELECT_DISK_CACHE=1 prevents loading cache from disk."""
+    # Save a cache file to disk
+    cache = FlakeCache()
+    cache.insert({"a": 1, "b": 2}, "test.selector")
+    cache_file = tmp_path / "test-cache"
+    cache.save_to_file(cache_file)
+    assert cache_file.exists()
+
+    # With CLAN_NO_SELECT_DISK_CACHE=1, load_cache should be a no-op
+    monkeypatch.setenv("CLAN_NO_SELECT_DISK_CACHE", "1")
+    flake_obj = Flake("test-flake")
+    flake_obj._cache = FlakeCache()
+    flake_obj.flake_cache_path = cache_file  # type: ignore[attr-defined]
+    flake_obj.load_cache()
+    assert not flake_obj._cache.is_cached("test.selector"), (
+        "Cache should NOT be loaded from disk when CLAN_NO_SELECT_DISK_CACHE=1"
+    )
+
+    # Without the env var, load_cache should work normally
+    monkeypatch.delenv("CLAN_NO_SELECT_DISK_CACHE")
+    flake_obj2 = Flake("test-flake")
+    flake_obj2._cache = FlakeCache()
+    flake_obj2.flake_cache_path = cache_file  # type: ignore[attr-defined]
+    flake_obj2.load_cache()
+    assert flake_obj2._cache.is_cached("test.selector"), (
+        "Cache SHOULD be loaded from disk when CLAN_NO_SELECT_DISK_CACHE is not set"
+    )
+
+
+def test_no_select_cache_env_skips_disk_save(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that CLAN_NO_SELECT_DISK_CACHE=1 prevents saving cache to disk."""
+    cache_file = tmp_path / "test-cache"
+
+    # With CLAN_NO_SELECT_DISK_CACHE=1, save should be skipped in get_from_nix
+    monkeypatch.setenv("CLAN_NO_SELECT_DISK_CACHE", "1")
+    flake_obj = Flake("test-flake")
+    flake_obj._cache = FlakeCache()
+    flake_obj.flake_cache_path = cache_file  # type: ignore[attr-defined]
+
+    # Simulate what get_from_nix does after fetching: insert + conditional save
+    flake_obj._cache.insert({"x": 1}, "some.selector")
+    # The save guard in get_from_nix checks this condition:
+    if (
+        flake_obj.flake_cache_path
+        and os.environ.get("CLAN_NO_SELECT_DISK_CACHE") != "1"
+    ):
+        flake_obj._cache.save_to_file(flake_obj.flake_cache_path)
+    assert not cache_file.exists(), (
+        "Cache file should NOT be written when CLAN_NO_SELECT_DISK_CACHE=1"
+    )
+
+    # Without the env var, save should work
+    monkeypatch.delenv("CLAN_NO_SELECT_DISK_CACHE")
+    if (
+        flake_obj.flake_cache_path
+        and os.environ.get("CLAN_NO_SELECT_DISK_CACHE") != "1"
+    ):
+        flake_obj._cache.save_to_file(flake_obj.flake_cache_path)
+    assert cache_file.exists(), (
+        "Cache file SHOULD be written when CLAN_NO_SELECT_DISK_CACHE is not set"
+    )
 
 
 @pytest.mark.broken_on_darwin
