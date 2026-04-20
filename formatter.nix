@@ -109,6 +109,7 @@
         "checks/secrets/sops/groups/group/machines/machine"
         "pkgs/clan-cli/clan_cli/tests/data/gnupg.conf"
         "pkgs/clan-cli/clan_cli/tests/data/password-store/.gpg-id"
+        "pkgs/clan-cli/clan_cli/tests/data/secrets.yaml"
         "pkgs/clan-cli/clan_cli/tests/data/ssh_host_ed25519_key"
         "pkgs/clan-cli/clan_cli/tests/data/sshd_config"
         "clanServices/hello-world/default.nix"
