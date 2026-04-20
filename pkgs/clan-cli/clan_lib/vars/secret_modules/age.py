@@ -219,7 +219,7 @@ class SecretStore(StoreBase):
         # Generate keypair
         try:
             result = cmd_run(
-                nix_shell(["age"], ["age-keygen"]),
+                nix_shell(["age"], ["age-keygen", "-pq"]),
                 RunOpts(log=Log.NONE),
             )
         except ClanCmdError as e:
