@@ -24,6 +24,7 @@ from clan_lib.persist.migrations import run_inventory_migrations
 from clan_lib.ssh.host_key import HostKeyCheck
 from clan_lib.ssh.localhost import LocalHost
 from clan_lib.ssh.remote import Remote
+from clan_lib.vars.classical_keys import warn_if_classical_recipients
 from clan_lib.vars.generate import run_generators
 from clan_lib.vars.generator import get_machine_selectors
 
@@ -172,6 +173,7 @@ def update_command(args: argparse.Namespace) -> None:
     try:
         flake = require_flake(args.flake)
         run_inventory_migrations(flake.path)
+        warn_if_classical_recipients(flake)
         machines_to_update = get_machines_for_update(flake, args.machines, args.tags)
 
         if args.target_host is not None and len(machines_to_update) > 1:
