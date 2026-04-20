@@ -76,8 +76,8 @@ def test_import_sops(
         ],
     )
 
-    # To edit:
-    # SOPS_AGE_KEY=AGE-SECRET-KEY-1U5ENXZQAY62NC78Y2WC0SEGRRMAEEKH79EYY5TH4GPFWJKEAY0USZ6X7YQ sops --age age14tva0txcrl0zes05x7gkx56qd6wd9q3nwecjac74xxzz4l47r44sv3fz62 ./data/secrets.yaml
+    # To edit, use the KEYS[1] identity from clan_cli/tests/age_keys.py:
+    # SOPS_AGE_KEY=AGE-SECRET-KEY-PQ-15TYSW7RQ4CWKGWE9N8LZAJWFR9GDFRGPE6CEZNQ4MKGWXJU8N3JQPNJPFP sops ./data/secrets.yaml
     cmd = [
         "secrets",
         "import-sops",
