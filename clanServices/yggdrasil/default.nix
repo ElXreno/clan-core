@@ -115,6 +115,17 @@
             "ws://192.168.1.1:6446"
           ];
         };
+
+        options.extraYggdrasilIPs = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = ''
+            Allow IPs to be able to connect to this host other than Clan members. By default,
+            this service only allows clan members to connect to each other. Using this option
+            to allow the host to connect to external Yggdrasil IP addresses.
+          '';
+          example = [ "324:71e:281a:9ed3::cafe" ];
+        };
       };
     perInstance =
       {
@@ -218,20 +229,22 @@
             );
 
             # Collect Yggdrasil IPv6 addresses from all machines in the role
-            allowedYggdrasilIPs = lib.filter (ip: ip != "") (
-              map (
-                name:
-                lib.strings.trim (
-                  clanLib.getPublicValue {
-                    flake = config.clan.core.settings.directory;
-                    machine = name;
-                    generator = "yggdrasil";
-                    file = "address";
-                    default = "";
-                  }
-                )
-              ) (lib.attrNames roles.default.machines)
-            );
+            allowedYggdrasilIPs =
+              lib.filter (ip: ip != "") (
+                map (
+                  name:
+                  lib.strings.trim (
+                    clanLib.getPublicValue {
+                      flake = config.clan.core.settings.directory;
+                      machine = name;
+                      generator = "yggdrasil";
+                      file = "address";
+                      default = "";
+                    }
+                  )
+                ) (lib.attrNames roles.default.machines)
+              )
+              ++ settings.extraYggdrasilIPs;
 
           in
           {
