@@ -334,7 +334,7 @@ class SecretStore(StoreBase):
             msg = f"Failed to decrypt {encrypted_file}: {e.cmd.stderr}"
             raise ClanError(msg) from e
 
-        return result.stdout.encode()
+        return result.stdout_raw
 
     def _run_age_decrypt_with_key(self, encrypted_file: Path, key_data: bytes) -> bytes:
         """Decrypt an age-encrypted file using a specific key (e.g. machine key)."""
@@ -350,7 +350,7 @@ class SecretStore(StoreBase):
             except ClanCmdError as e:
                 msg = f"Failed to decrypt {encrypted_file}: {e.cmd.stderr}"
                 raise ClanError(msg) from e
-        return result.stdout.encode()
+        return result.stdout_raw
 
     # ── StoreBase implementation ──────────────────────────────────────────
 

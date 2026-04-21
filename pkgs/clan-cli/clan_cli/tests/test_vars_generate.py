@@ -1093,3 +1093,42 @@ def test_exports_without_generators_evaluates(
     generators = get_flake_generators(flake_obj)
 
     assert generators == {}
+
+
+@pytest.mark.broken_on_darwin
+@pytest.mark.with_core
+def test_binary_secret_roundtrip(
+    monkeypatch: pytest.MonkeyPatch,
+    flake_with_sops: ClanFlake,
+) -> None:
+    """Binary secrets must survive set/get without corruption.
+
+    Regression test: non-UTF-8 bytes were destroyed by lossy UTF-8 decoding
+    in the subprocess I/O layer, causing sops-encrypted binary secrets
+    (e.g. LUKS keyfiles) to be silently corrupted on retrieval.
+    """
+    flake = flake_with_sops
+
+    config = flake.machines["my_machine"] = create_test_machine_config()
+    my_generator = config["clan"]["core"]["vars"]["generators"]["my_generator"]
+    my_generator["files"]["my_secret"]["secret"] = True
+
+    flake.refresh()
+    monkeypatch.chdir(flake.path)
+
+    # Binary data containing every possible byte value (0x00-0xFF),
+    # which includes bytes that are invalid UTF-8
+    binary_data = bytes(range(256)) * 64  # 16 KiB
+
+    flake_obj = Flake(str(flake.path))
+    set_var("my_machine", "my_generator/my_secret", binary_data, flake_obj)
+
+    # Retrieve through the store and verify exact match
+    sops_store = sops.SecretStore(flake=flake_obj)
+    generator_id = GeneratorId(name="my_generator", placement=PerMachine("my_machine"))
+    retrieved = sops_store.get(generator_id, "my_secret")
+
+    assert retrieved == binary_data, (
+        f"Binary secret was corrupted during round-trip!\n"
+        f"Expected {len(binary_data)} bytes, got {len(retrieved)} bytes"
+    )
