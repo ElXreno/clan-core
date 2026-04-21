@@ -68,4 +68,4 @@ no_implicit_optional = true
 # no_implicit_reexport = true
 # strict_equality
 # extra_checks
-exclude = "clan_lib.runtime-deps"
+exclude = ["clan_lib/runtime-deps/", "^result/"]
