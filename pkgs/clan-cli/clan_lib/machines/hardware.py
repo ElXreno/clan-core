@@ -17,6 +17,7 @@ from clan_lib.machines.nixos_anywhere import (
     add_nix_options,
     add_nixos_anywhere_key,
     add_password_options,
+    add_ssh_options,
     add_ssh_port,
     add_target,
     add_target_private_key,
@@ -152,6 +153,7 @@ def run_machine_hardware_info_init(
     cmd = add_kexec(cmd, opts.kexec)
     cmd = add_test_store_workaround(cmd, environ)
     cmd = add_nix_options(cmd, machine)
+    cmd = add_ssh_options(cmd, target_host)
     cmd = add_target(cmd, target_host)
     cmd = wrap_nix_shell(cmd, target_host)
 

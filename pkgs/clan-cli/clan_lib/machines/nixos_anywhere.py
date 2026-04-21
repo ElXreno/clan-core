@@ -182,6 +182,25 @@ def add_nix_options(cmd: list[str], machine: Machine) -> list[str]:
     return [*cmd, *(machine.flake.nix_options or [])]
 
 
+def add_ssh_options(cmd: list[str], target_host: Remote) -> list[str]:
+    """Forward target_host.ssh_options to nixos-anywhere as --ssh-option flags.
+
+    Needed when the Remote was resolved through clan_lib.network (e.g. p2p-ssh-iroh
+    sets a ProxyCommand) — without this, nixos-anywhere shells out to plain ssh and
+    can't reach an address that only resolves via the proxy.
+
+    host_key_check is intentionally not forwarded: nixos-anywhere hardcodes
+    StrictHostKeyChecking=no and UserKnownHostsFile=/dev/null at the start of its
+    sshArgs, and SSH's "first occurrence wins" rule means any forwarded value
+    would be silently ignored.
+    """
+    extra: list[str] = []
+    for k, v in target_host.ssh_options.items():
+        extra.extend(["--ssh-option", f"{k}={v}"])
+
+    return [*cmd, *extra]
+
+
 def add_target(cmd: list[str], target_host: Remote) -> list[str]:
     """Append target host address to command.
 
