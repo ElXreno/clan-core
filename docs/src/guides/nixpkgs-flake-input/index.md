@@ -105,7 +105,6 @@ Here is a `flake.nix` that wires an overlay into the `pkgs` that Clan uses:
       systems = [
         "x86_64-linux"
         "aarch64-linux"
-        "x86_64-darwin"
         "aarch64-darwin"
       ];
       imports = [
