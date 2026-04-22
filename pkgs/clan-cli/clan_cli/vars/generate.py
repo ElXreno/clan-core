@@ -1,4 +1,5 @@
 import argparse
+import time
 from typing import TYPE_CHECKING
 
 from clan_cli.completions import (
@@ -10,6 +11,7 @@ from clan_lib.flake import require_flake
 from clan_lib.machines.list import list_full_machines
 from clan_lib.vars.classical_keys import warn_if_classical_recipients
 from clan_lib.vars.generate import run_generators
+from clan_lib.vars.generator import evaluation_time_context
 
 if TYPE_CHECKING:
     from clan_lib.machines.machines import Machine
@@ -30,13 +32,15 @@ def generate_command(args: argparse.Namespace) -> None:
 
     # When not regenerating, auto-accept previous prompt values
     auto_accept_prompts = not args.regenerate if args.regenerate is not None else True
-    run_generators(
-        machines,
-        generators=[args.generator] if args.generator else None,
-        full_closure=args.regenerate if args.regenerate is not None else False,
-        no_sandbox=args.no_sandbox,
-        auto_accept_prompts=auto_accept_prompts,
-    )
+    now = args.now if args.now is not None else int(time.time())
+    with evaluation_time_context(now):
+        run_generators(
+            machines,
+            generators=[args.generator] if args.generator else None,
+            full_closure=args.regenerate if args.regenerate is not None else False,
+            no_sandbox=args.no_sandbox,
+            auto_accept_prompts=auto_accept_prompts,
+        )
 
 
 def register_generate_parser(parser: argparse.ArgumentParser) -> None:
@@ -78,6 +82,17 @@ def register_generate_parser(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="automatically fill prompt responses for testing (unsafe)",
         default=False,
+    )
+
+    parser.add_argument(
+        "--now",
+        type=int,
+        default=None,
+        help=(
+            "Wall-clock epoch (seconds) used to compute the rotation bucket for "
+            "generators declaring `rotateDays`. Defaults to the current time. "
+            "Primarily for testing and CI reproducibility."
+        ),
     )
 
     parser.set_defaults(func=generate_command)
