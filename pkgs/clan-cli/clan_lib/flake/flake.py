@@ -1029,10 +1029,16 @@ class Flake:
                 raise ClanError(msg)
             select_hash = select_flake.hash
 
+        # Nix's path fetcher drops `lastModified` when re-resolving a cached
+        # store path, so `self.lastModified` would be 0 without this hint.
+        locked = (self.flake_metadata or {}).get("locked", {})
+        last_modified = locked.get("lastModified")
+        lm_param = f"&lastModified={last_modified}" if last_modified else ""
+
         # fmt: off
         nix_code = f"""
             let
-              flake = builtins.getFlake "path:{self.store_path}?narHash={self.hash}";
+              flake = builtins.getFlake "path:{self.store_path}?narHash={self.hash}{lm_param}";
               selectLib = (
                 builtins.getFlake
                   "path:{select_source()}?narHash={select_hash}"
