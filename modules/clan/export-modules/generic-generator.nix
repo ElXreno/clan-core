@@ -114,6 +114,24 @@ in
         ]))
       ]);
     };
+
+    rotateDays = mkOption {
+      description = ''
+        Regenerate this generator every N days on wall-clock time.
+
+        Unlike `validation`, which is evaluated in Nix and therefore only
+        flips when an input changes, `rotateDays` is enforced by clan-cli
+        itself: on every `clan vars generate` run, clan-cli folds the
+        current time bucket (`floor(now / (rotateDays * 86400))`) into the
+        effective validation hash, so the generator rotates on schedule
+        regardless of flake-update cadence.
+
+        Can be combined with `validation` — both contribute to the hash.
+      '';
+      type = nullOr (types.ints.positive);
+      default = null;
+      example = 7;
+    };
     # the validationHash is the validation interface to the outside world
     validationHash = mkOption {
       internal = true;
