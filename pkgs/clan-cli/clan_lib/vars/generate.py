@@ -378,7 +378,7 @@ def get_flake_generators(
 ) -> dict[GeneratorId, Generator]:
     system = current_system()
     raw_generators = flake.select(
-        f"clanInternals.systems.{system}.exports.*.generators.*.{{share,dependencies,prompts,validationHash}}"
+        f"clanInternals.systems.{system}.exports.*.generators.*.{{share,dependencies,prompts,validationHash,rotateDays}}"
     )
     raw_files = flake.select(
         f"clanInternals.systems.{system}.exports.*.generators.*.files.*.{{secret,deploy,owner,group,mode,neededFor}}"

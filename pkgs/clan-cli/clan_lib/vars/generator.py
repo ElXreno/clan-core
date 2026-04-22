@@ -1,10 +1,13 @@
 import dataclasses
 import difflib
+import hashlib
 import logging
 import os
 import pprint
+import time
 from collections.abc import Iterable, Sequence
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -44,6 +47,29 @@ from clan_lib.machines.machines import Machine
 from ._types import GeneratorId, PerExport, PerMachine, Placement, Shared
 
 log = logging.getLogger(__name__)
+
+
+_evaluation_time: ContextVar[int | None] = ContextVar("evaluation_time", default=None)
+
+
+@contextmanager
+def evaluation_time_context(epoch: int):  # type: ignore[no-untyped-def]
+    """Pin the wall-clock time used for rotation-bucket computation.
+
+    When set, `Generator.validation()` uses this value instead of `time.time()`
+    for generators with `rotateDays`. Intended for CLI invocations (single
+    captured `now` across the whole run) and for test/CI determinism.
+    """
+    token = _evaluation_time.set(epoch)
+    try:
+        yield
+    finally:
+        _evaluation_time.reset(token)
+
+
+def current_evaluation_time() -> int:
+    v = _evaluation_time.get()
+    return v if v is not None else int(time.time())
 
 
 @dataclass(frozen=True)
@@ -249,6 +275,13 @@ def find_generator_differences(
             f"  {curr_machine}={curr_data.get('validationHash')}"
         )
         differences.append("validation_hash")
+    if ref_data.get("rotateDays") != curr_data.get("rotateDays"):
+        log.debug(
+            f"rotateDays differs for generator '{gen_name}':\n"
+            f"  {ref_machine}={ref_data.get('rotateDays')}\n"
+            f"  {curr_machine}={curr_data.get('rotateDays')}"
+        )
+        differences.append("rotate_days")
 
     return differences
 
@@ -379,6 +412,7 @@ def get_machine_generators(
                 files=files,
                 dependency_map=dependency_map,
                 validation_hash=gen_data.get("validationHash"),
+                rotate_days=gen_data.get("rotateDays"),
                 prompts=prompts,
                 _final_script_source=MachineFinalScript(machine_name=machine_name),
                 _flake=flake,
@@ -429,6 +463,7 @@ class Generator:
     """
 
     validation_hash: str | None = None
+    rotate_days: int | None = None
 
     _final_script_source: FinalScriptSource | None = None
     _flake: "Flake | None" = None
@@ -529,7 +564,14 @@ class Generator:
         return output
 
     def validation(self) -> str | None:
-        return self.validation_hash
+        if self.rotate_days is None:
+            return self.validation_hash
+        bucket = current_evaluation_time() // (self.rotate_days * 86400)
+        parts: list[str] = []
+        if self.validation_hash is not None:
+            parts.append(self.validation_hash)
+        parts.append(f"rotate:{bucket}")
+        return hashlib.sha256("|".join(parts).encode()).hexdigest()
 
     def with_toggled_share(self, machine: str) -> "Generator":
         if self.share:

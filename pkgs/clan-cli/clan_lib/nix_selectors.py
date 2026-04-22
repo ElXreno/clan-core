@@ -197,7 +197,7 @@ def machine_vars_settings_public_module(system: str, machine: str) -> str:
 @machines_selector
 def vars_generators_metadata(system: str, machines: list[str]) -> str:
     prefix = get_machine_prefix()
-    return f"{prefix}.{system}.{{{','.join(machines)}}}.config.clan.core.vars.generators.*.{{share,dependencies,prompts,validationHash}}"
+    return f"{prefix}.{system}.{{{','.join(machines)}}}.config.clan.core.vars.generators.*.{{share,dependencies,prompts,validationHash,rotateDays}}"
 
 
 @machines_selector
