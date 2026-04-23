@@ -273,6 +273,8 @@ pythonRuntime.pkgs.buildPythonApplication {
                 pkgs.shellcheck-minimal
                 pkgs.mkpasswd
                 pkgs.xkcdpass
+                # needed by p2p-ssh-iroh (iroh-ssh) clan service vars generator
+                pkgs.dumbpipe
                 pkgs.pass
                 pkgs.passage
                 zerotierone
