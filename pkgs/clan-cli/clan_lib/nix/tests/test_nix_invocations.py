@@ -3,23 +3,24 @@
 This test verifies that _resolve_package (which uses Flake.select and nix_add_to_gcroots)
 is properly cached using symlinks as GC roots, so repeated nix_shell calls for the
 same package only trigger one actual nix evaluation.
+
+Note: I really tried to make nix build work inside the sandbox, however in combination with
+--inputs-from pointing to a custom directory of a custom build flake for remote inputs and
+--store to a custom dir. Nix build would fail with an 'chmod' error. Instead we use the
+``mock_nix_in_sandbox`` fixture (see :mod:`clan_cli.tests.nix_sandbox_mock`), which patches
+package resolution to point at a fake writable store.
 """
 
 import logging
 import os
-from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 import pytest
 
 import clan_lib.nix.shell as shell_module
 from clan_lib.dirs import runtime_deps_flake
-from clan_lib.errors import CmdOut
-from clan_lib.flake.flake import Flake
 from clan_lib.nix.shell import (
-    Packages,
     ResolvedPackage,
     _create_gcroot,
     _get_nix_shell_cache_dir,
@@ -28,163 +29,6 @@ from clan_lib.nix.shell import (
 )
 
 log = logging.getLogger(__name__)
-
-# Package mock data: (store_path_suffix, mainProgram, has_bin_output)
-MOCK_PACKAGES: dict[str, tuple[str, str | None, bool]] = {
-    "git": ("git", None, False),
-    "jq": ("jq", None, True),  # jq has separate bin output
-    "openssh": ("openssh", "ssh", False),
-    "netcat": ("netcat", None, False),
-}
-
-
-# Note: I really tried to make nix build work inside the sandbox, however in combination with
-# --inputs-from  pointing to a custom directory of a custom build flake for remote inputs and --store to a custom dir.
-# Nix build would fail with an 'chmod' error.
-@pytest.fixture
-def mock_nix_in_sandbox(temporary_home: Path) -> Iterator[None]:
-    """Mock Flake.select and run when IN_NIX_SANDBOX is set."""
-    if not os.environ.get("IN_NIX_SANDBOX"):
-        yield
-        return
-
-    # Create fake nix store in temp directory
-    fake_store = temporary_home / "nix" / "store"
-    fake_store.mkdir(parents=True, exist_ok=True)
-
-    # Track created fake packages
-    created_packages: dict[str, Path] = {}
-
-    def get_fake_store_path(package: str, output: str = "") -> Path:
-        """Get or create a fake store path for a package."""
-        cache_key = f"{package}-{output}" if output else package
-        if cache_key in created_packages:
-            return created_packages[cache_key]
-
-        suffix, main_program, _ = MOCK_PACKAGES.get(package, (package, None, False))
-        exe_name = main_program or package
-
-        # For multi-output, add output suffix to store path
-        path_suffix = f"{suffix}-{output}" if output else suffix
-        store_path = fake_store / f"fakehash-{path_suffix}"
-        store_path.mkdir(parents=True, exist_ok=True)
-
-        # Create bin directory with executable
-        bin_dir = store_path / "bin"
-        bin_dir.mkdir(exist_ok=True)
-        exe_path = bin_dir / exe_name
-        exe_path.touch()
-        exe_path.chmod(0o755)
-
-        created_packages[cache_key] = store_path
-        return store_path
-
-    def mock_flake_select(_self: Any, selector: str) -> Any:
-        """Mock Flake.select to return fake store paths."""
-        # Parse selector like: inputs.nixpkgs.legacyPackages.x86_64-linux.git.outPath
-        parts = selector.split(".")
-
-        # Find package name (comes before outPath or ?meta)
-        package = None
-        for i, part in enumerate(parts):
-            if part in ("outPath", "?meta"):
-                package = parts[i - 1]
-                break
-
-        if package is None:
-            return None
-
-        if ".outPath" in selector or selector.endswith("outPath"):
-            # For multi-output packages, outPath returns the bin output path
-            _, _, has_bin_output = MOCK_PACKAGES.get(package, (package, None, False))
-            if has_bin_output:
-                return str(get_fake_store_path(package, "bin"))
-            return str(get_fake_store_path(package))
-
-        if "?meta" in selector and "?mainProgram" in selector:
-            _, main_program, _ = MOCK_PACKAGES.get(package, (package, None, False))
-            if main_program:
-                return {"meta": {"mainProgram": main_program}}
-            return {}
-
-        if "?meta" in selector and "?outputsToInstall" in selector:
-            _, _, has_bin_output = MOCK_PACKAGES.get(package, (package, None, False))
-            if has_bin_output:
-                return {"meta": {"outputsToInstall": ["bin", "man"]}}
-            return {}
-
-        return None
-
-    def mock_run(cmd: list[str], _options: Any = None) -> CmdOut:
-        """Mock run() to create symlinks for nix build commands."""
-        # Check if this is a nix build command
-        if len(cmd) > 0 and "nix" in cmd[0] and "build" in cmd:
-            # Find --out-link argument and package
-            gcroot = None
-            package = None
-
-            for i, arg in enumerate(cmd):
-                if arg == "--out-link" and i + 1 < len(cmd):
-                    gcroot = Path(cmd[i + 1])
-                elif arg.startswith("nixpkgs#"):
-                    package = arg.split("#")[1]
-
-            if gcroot and package:
-                gcroot.parent.mkdir(parents=True, exist_ok=True)
-
-                # Get package info
-                _, _, has_bin_output = MOCK_PACKAGES.get(
-                    package, (package, None, False)
-                )
-
-                # Create main symlink
-                store_path = get_fake_store_path(package)
-                if gcroot.is_symlink():
-                    gcroot.unlink()
-                gcroot.symlink_to(store_path)
-
-                # For multi-output packages, create -bin and -man symlinks
-                if has_bin_output:
-                    for output in ["bin", "man"]:
-                        output_gcroot = gcroot.parent / f"{gcroot.name}-{output}"
-                        output_store_path = get_fake_store_path(package, output)
-                        if output_gcroot.is_symlink():
-                            output_gcroot.unlink()
-                        output_gcroot.symlink_to(output_store_path)
-
-                return CmdOut(
-                    stdout=str(store_path),
-                    stderr="",
-                    cwd=Path.cwd(),
-                    env=None,
-                    command_list=cmd,
-                    returncode=0,
-                    msg=None,
-                )
-
-        msg = f"Unexpected command in sandbox mock: {cmd}"
-        raise RuntimeError(msg)
-
-    with (
-        patch.object(Flake, "select", mock_flake_select),
-        patch.object(Flake, "precache", lambda _self, _selectors: None),
-        patch("clan_lib.nix.shell.run", mock_run),
-    ):
-        yield
-
-
-@pytest.fixture
-def clear_nix_cache(temporary_home: Path) -> Iterator[None]:
-    """Clear the nix shell cache before and after tests.
-
-    Must run after temporary_home to ensure the cache uses the temp directory.
-    """
-    _ = temporary_home  # Ensure temporary_home runs first
-    _get_nix_shell_cache_dir.cache_clear()
-    Packages.static_packages = None  # Clear cached provided packages
-    yield
-    _get_nix_shell_cache_dir.cache_clear()
-    Packages.static_packages = None
 
 
 @pytest.mark.usefixtures("clear_nix_cache", "mock_nix_in_sandbox")
