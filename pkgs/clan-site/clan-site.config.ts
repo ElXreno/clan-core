@@ -77,20 +77,20 @@ export const docsNav: DocsNavItems = [
         label: "Vars",
         children: [
           "guides/vars/intro-to-vars",
+          "guides/vars/using-vars",
           {
-            label: "Backend",
+            label: "Backends",
             children: [
-              "guides/vars/vars-backend",
               {
-                label: "Sops Backend",
+                label: "SOPS",
                 children: [
                   "guides/vars/sops/age-plugins",
                   "guides/vars/sops/secrets",
                 ],
               },
               {
-                label: "Age Backend",
-                children: ["guides/vars/age/age-backend"],
+                label: "age",
+                path: "guides/vars/age/age-backend",
               },
             ],
           },
@@ -123,7 +123,7 @@ export const docsNav: DocsNavItems = [
       "guides/flake-parts",
       "guides/nixos-rebuild",
       "guides/specialisations",
-      { label: "MacOS", path: "guides/macos" },
+      "guides/macos",
       {
         label: "Templates",
         children: ["concepts/templates", "guides/disko-templates/community"],

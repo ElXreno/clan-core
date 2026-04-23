@@ -1,4 +1,4 @@
-# Age Backend
+# age Backend for Vars
 
 The **age** backend encrypts secrets using [age](https://github.com/FiloSottile/age) and decrypts them on the target machine during NixOS activation. Secrets are stored encrypted in your repository and uploaded encrypted to target machines — plaintext only exists in memory on the target.
 

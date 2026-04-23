@@ -1,4 +1,4 @@
-# Whats Next
+# What's Next
 
 ## What's next?
 

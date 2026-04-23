@@ -1,4 +1,4 @@
-# Macos
+# macOS
 
 ## Managing macOS Machines with Clan
 

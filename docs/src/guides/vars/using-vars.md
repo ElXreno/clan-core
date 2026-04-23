@@ -1,4 +1,4 @@
-# Vars Backend
+# Using Vars
 
 Declare a vars generator, generate a hashed root password, deploy it to a machine, and then share and rotate that password across multiple machines.
 
