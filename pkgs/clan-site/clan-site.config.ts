@@ -123,7 +123,7 @@ export const docsNav: DocsNavItems = [
       "guides/flake-parts",
       "guides/nixos-rebuild",
       "guides/specialisations",
-      { label: "MacOS", path: "guides/macos" },
+      "guides/macos",
       {
         label: "Templates",
         children: ["concepts/templates", "guides/disko-templates/community"],
