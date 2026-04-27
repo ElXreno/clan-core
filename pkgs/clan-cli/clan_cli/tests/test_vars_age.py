@@ -14,7 +14,7 @@ from clan_cli.vars.generate import generate_command
 from clan_lib.errors import ClanError
 from clan_lib.flake import Flake
 from clan_lib.machines.machines import Machine
-from clan_lib.vars._types import GeneratorId, PerMachine, Shared
+from clan_lib.vars._types import GeneratorId, PerMachine, Shared, StoreRequest
 from clan_lib.vars.generator import Generator
 from clan_lib.vars.list import stringify_all_vars
 from clan_lib.vars.secret_modules import age
@@ -81,6 +81,15 @@ def make_generator(
         key=GeneratorId(name=name, placement=placement),
         files=files or [],
         _flake=flake,
+    )
+
+
+def policy_for(gen: Generator, var: Var) -> StoreRequest:
+    """Build a StoreRequest from a generator and var for testing."""
+    return StoreRequest(
+        gen.key.placement,
+        deploy=var.machines if var.deploy else [],
+        machines=var.machines,
     )
 
 
@@ -531,7 +540,7 @@ def test_age_set_and_get_per_machine(
     )
 
     # Set a secret
-    result_paths = store._set(gen, var, b"secret-value")
+    result_paths = store._set(gen.key, var.name, b"secret-value", policy_for(gen, var))
     assert len(result_paths) > 0
     assert all(p.exists() for p in result_paths)
 
@@ -562,7 +571,7 @@ def test_age_set_and_get_shared(
     )
 
     # Set — should encrypt to both machines' pubkeys
-    store._set(gen, var, b"shared-value")
+    store._set(gen.key, var.name, b"shared-value", policy_for(gen, var))
 
     # Both machines should be able to decrypt
     value = store.get(gen.key, "shared_secret")
@@ -596,7 +605,7 @@ def test_age_get_shared_finds_any_machine_key(
     var = make_var("shared_secret", machines=["machine_a", "machine_b"])
     gen = make_generator("shared_gen", Shared(), flake_obj, files=[var])
 
-    store._set(gen, var, b"shared-value")
+    store._set(gen.key, var.name, b"shared-value", policy_for(gen, var))
 
     # get() with Shared placement should find any machine key to decrypt
     value = store.get(gen.key, "shared_secret")
@@ -643,10 +652,24 @@ def test_age_populate_dir(
     )
 
     # Set secrets
-    store._set(gen_svc, service_var, b"service-secret")
-    store._set(gen_usr, user_var, b"user-secret")
-    store._set(gen_act, activation_var, b"activation-secret")
-    store._set(gen_perm, perm_var, b"perm-secret")
+    store._set(
+        gen_svc.key,
+        service_var.name,
+        b"service-secret",
+        policy_for(gen_svc, service_var),
+    )
+    store._set(
+        gen_usr.key, user_var.name, b"user-secret", policy_for(gen_usr, user_var)
+    )
+    store._set(
+        gen_act.key,
+        activation_var.name,
+        b"activation-secret",
+        policy_for(gen_act, activation_var),
+    )
+    store._set(
+        gen_perm.key, perm_var.name, b"perm-secret", policy_for(gen_perm, perm_var)
+    )
 
     # Populate upload directory
     with TemporaryDirectory() as tmpdir:
@@ -702,7 +725,7 @@ def test_age_fix_shared_reencrypt(
     # Create a shared secret encrypted only to machine_a
     var = make_var("shared_secret", machines=["machine_a"])
     gen_a_only = make_generator("shared_gen", Shared(), flake_obj, files=[var])
-    store._set(gen_a_only, var, b"shared-value")
+    store._set(gen_a_only.key, var.name, b"shared-value", policy_for(gen_a_only, var))
 
     # machine_b can't decrypt it yet
     store.ensure_machine_key("machine_b")
@@ -844,7 +867,7 @@ def test_age_error_get_no_machine_key(
     # Create a shared secret (so it's stored at the shared path)
     var = make_var("my_secret", machines=["machine_a"])
     gen = make_generator("my_gen", Shared(), flake_obj, files=[var])
-    store._set(gen, var, b"secret-value")
+    store._set(gen.key, var.name, b"secret-value", policy_for(gen, var))
 
     # Remove the machine key dir so get() can't find any key to decrypt with
     shutil.rmtree(store.machine_key_dir("machine_a"))
@@ -884,7 +907,7 @@ def test_age_delete_cleanup(
 
     var = make_var("my_secret", machines=["my_machine"])
     gen = make_generator("my_gen", PerMachine("my_machine"), flake_obj, files=[var])
-    store._set(gen, var, b"secret-value")
+    store._set(gen.key, var.name, b"secret-value", policy_for(gen, var))
 
     secret_file = store.secret_path(gen.key, "my_secret")
     assert secret_file.exists()
@@ -917,7 +940,7 @@ def test_age_delete_store_leaves_shared_secrets_untouched(
     # Create a shared secret encrypted to both machines
     var = make_var("shared_secret", machines=["machine_a", "machine_b"])
     gen = make_generator("shared_gen", Shared(), flake_obj, files=[var])
-    store._set(gen, var, b"shared-value")
+    store._set(gen.key, var.name, b"shared-value", policy_for(gen, var))
 
     secret_file = store.secret_path(gen.key, "shared_secret")
     ciphertext_before = secret_file.read_bytes()
@@ -952,7 +975,7 @@ def test_age_sidecar_created_for_shared_secret(
 
     var = make_var("shared_secret", machines=["machine_a", "machine_b"])
     gen = make_generator("shared_gen", Shared(), flake_obj, files=[var])
-    store._set(gen, var, b"shared-value")
+    store._set(gen.key, var.name, b"shared-value", policy_for(gen, var))
 
     secret_file = store.secret_path(gen.key, "shared_secret")
     recipients_file = store._recipients_file(secret_file)
@@ -979,7 +1002,7 @@ def test_age_no_sidecar_for_per_machine_secret(
 
     var = make_var("my_secret", machines=["my_machine"])
     gen = make_generator("my_gen", PerMachine("my_machine"), flake_obj, files=[var])
-    store._set(gen, var, b"secret-value")
+    store._set(gen.key, var.name, b"secret-value", policy_for(gen, var))
 
     secret_file = store.secret_path(gen.key, "my_secret")
     recipients_file = store._recipients_file(secret_file)
@@ -1003,7 +1026,7 @@ def test_age_deploy_false_per_machine_encrypted_to_user_keys(
 
     var = make_var("my_secret", machines=["my_machine"], deploy=False)
     gen = make_generator("my_gen", PerMachine("my_machine"), flake_obj, files=[var])
-    store._set(gen, var, b"secret-value")
+    store._set(gen.key, var.name, b"secret-value", policy_for(gen, var))
 
     secret_file = store.secret_path(gen.key, "my_secret")
 
@@ -1041,7 +1064,7 @@ def test_age_deploy_false_shared_encrypted_to_user_keys(
 
     var = make_var("shared_secret", machines=["machine_a", "machine_b"], deploy=False)
     gen = make_generator("shared_gen", Shared(), flake_obj, files=[var])
-    store._set(gen, var, b"shared-value")
+    store._set(gen.key, var.name, b"shared-value", policy_for(gen, var))
 
     secret_file = store.secret_path(gen.key, "shared_secret")
 
@@ -1075,7 +1098,7 @@ def test_age_deploy_true_per_machine_encrypted_to_machine_key(
 
     var = make_var("my_secret", machines=["my_machine"], deploy=True)
     gen = make_generator("my_gen", PerMachine("my_machine"), flake_obj, files=[var])
-    store._set(gen, var, b"secret-value")
+    store._set(gen.key, var.name, b"secret-value", policy_for(gen, var))
 
     secret_file = store.secret_path(gen.key, "my_secret")
 
@@ -1104,7 +1127,7 @@ def test_age_deploy_true_shared_encrypted_to_machine_keys(
 
     var = make_var("shared_secret", machines=["machine_a", "machine_b"], deploy=True)
     gen = make_generator("shared_gen", Shared(), flake_obj, files=[var])
-    store._set(gen, var, b"shared-value")
+    store._set(gen.key, var.name, b"shared-value", policy_for(gen, var))
 
     secret_file = store.secret_path(gen.key, "shared_secret")
 
@@ -1140,7 +1163,7 @@ def test_age_fix_deploy_false_per_machine_rekeys_on_user_change(
 
     var = make_var("my_secret", machines=["my_machine"], deploy=False)
     gen = make_generator("my_gen", PerMachine("my_machine"), flake_obj, files=[var])
-    store._set(gen, var, b"secret-value")
+    store._set(gen.key, var.name, b"secret-value", policy_for(gen, var))
 
     secret_file = store.secret_path(gen.key, "my_secret")
     ciphertext_before = secret_file.read_bytes()
@@ -1189,7 +1212,7 @@ def test_age_fix_deploy_false_shared_rekeys_on_user_change(
 
     var = make_var("shared_secret", machines=["machine_a", "machine_b"], deploy=False)
     gen = make_generator("shared_gen", Shared(), flake_obj, files=[var])
-    store._set(gen, var, b"shared-value")
+    store._set(gen.key, var.name, b"shared-value", policy_for(gen, var))
 
     secret_file = store.secret_path(gen.key, "shared_secret")
     ciphertext_before = secret_file.read_bytes()
@@ -1240,7 +1263,9 @@ def test_age_transition_deploy_true_to_false_per_machine(
     gen = make_generator(
         "my_gen", PerMachine("my_machine"), flake_obj, files=[var_deployed]
     )
-    store._set(gen, var_deployed, b"secret-value")
+    store._set(
+        gen.key, var_deployed.name, b"secret-value", policy_for(gen, var_deployed)
+    )
 
     secret_file = store.secret_path(gen.key, "my_secret")
 
@@ -1253,7 +1278,9 @@ def test_age_transition_deploy_true_to_false_per_machine(
     gen2 = make_generator(
         "my_gen", PerMachine("my_machine"), flake_obj, files=[var_undeployed]
     )
-    store._set(gen2, var_undeployed, b"secret-value")
+    store._set(
+        gen2.key, var_undeployed.name, b"secret-value", policy_for(gen2, var_undeployed)
+    )
 
     # Machine can no longer decrypt
     with pytest.raises(ClanError, match="Failed to decrypt"):
@@ -1281,7 +1308,9 @@ def test_age_transition_deploy_false_to_true_per_machine(
     gen = make_generator(
         "my_gen", PerMachine("my_machine"), flake_obj, files=[var_undeployed]
     )
-    store._set(gen, var_undeployed, b"secret-value")
+    store._set(
+        gen.key, var_undeployed.name, b"secret-value", policy_for(gen, var_undeployed)
+    )
 
     secret_file = store.secret_path(gen.key, "my_secret")
     store.ensure_machine_key("my_machine")
@@ -1296,7 +1325,9 @@ def test_age_transition_deploy_false_to_true_per_machine(
     gen2 = make_generator(
         "my_gen", PerMachine("my_machine"), flake_obj, files=[var_deployed]
     )
-    store._set(gen2, var_deployed, b"secret-value")
+    store._set(
+        gen2.key, var_deployed.name, b"secret-value", policy_for(gen2, var_deployed)
+    )
 
     # Machine can now decrypt
     plaintext = store._run_age_decrypt_with_key(secret_file, machine_key)
@@ -1322,7 +1353,9 @@ def test_age_transition_deploy_true_to_false_shared(
         "shared_secret", machines=["machine_a", "machine_b"], deploy=True
     )
     gen = make_generator("shared_gen", Shared(), flake_obj, files=[var_deployed])
-    store._set(gen, var_deployed, b"shared-value")
+    store._set(
+        gen.key, var_deployed.name, b"shared-value", policy_for(gen, var_deployed)
+    )
 
     secret_file = store.secret_path(gen.key, "shared_secret")
 
@@ -1336,7 +1369,9 @@ def test_age_transition_deploy_true_to_false_shared(
         "shared_secret", machines=["machine_a", "machine_b"], deploy=False
     )
     gen2 = make_generator("shared_gen", Shared(), flake_obj, files=[var_undeployed])
-    store._set(gen2, var_undeployed, b"shared-value")
+    store._set(
+        gen2.key, var_undeployed.name, b"shared-value", policy_for(gen2, var_undeployed)
+    )
 
     # No machine can decrypt
     for m in ["machine_a", "machine_b"]:
@@ -1368,7 +1403,9 @@ def test_age_transition_deploy_false_to_true_shared(
         "shared_secret", machines=["machine_a", "machine_b"], deploy=False
     )
     gen = make_generator("shared_gen", Shared(), flake_obj, files=[var_undeployed])
-    store._set(gen, var_undeployed, b"shared-value")
+    store._set(
+        gen.key, var_undeployed.name, b"shared-value", policy_for(gen, var_undeployed)
+    )
 
     secret_file = store.secret_path(gen.key, "shared_secret")
 
@@ -1384,7 +1421,9 @@ def test_age_transition_deploy_false_to_true_shared(
         "shared_secret", machines=["machine_a", "machine_b"], deploy=True
     )
     gen2 = make_generator("shared_gen", Shared(), flake_obj, files=[var_deployed])
-    store._set(gen2, var_deployed, b"shared-value")
+    store._set(
+        gen2.key, var_deployed.name, b"shared-value", policy_for(gen2, var_deployed)
+    )
 
     # Both machines can now decrypt
     for m in ["machine_a", "machine_b"]:
@@ -1409,7 +1448,7 @@ def test_age_get_works_for_deploy_false_per_machine(
 
     var = make_var("my_secret", machines=["my_machine"], deploy=False)
     gen = make_generator("my_gen", PerMachine("my_machine"), flake_obj, files=[var])
-    store._set(gen, var, b"secret-value")
+    store._set(gen.key, var.name, b"secret-value", policy_for(gen, var))
 
     # get() should work via the user identity fallback
     value = store.get(gen.key, "my_secret")
@@ -1431,7 +1470,7 @@ def test_age_get_works_for_deploy_false_shared(
 
     var = make_var("shared_secret", machines=["machine_a", "machine_b"], deploy=False)
     gen = make_generator("shared_gen", Shared(), flake_obj, files=[var])
-    store._set(gen, var, b"shared-value")
+    store._set(gen.key, var.name, b"shared-value", policy_for(gen, var))
 
     # get() should work via the user identity fallback
     value = store.get(gen.key, "shared_secret")
@@ -1467,8 +1506,18 @@ def test_age_populate_dir_skips_deploy_false(
         "gen_undep", PerMachine("my_machine"), flake_obj, files=[undeployed_var]
     )
 
-    store._set(gen_deployed, deployed_var, b"deployed-secret")
-    store._set(gen_undeployed, undeployed_var, b"undeployed-secret")
+    store._set(
+        gen_deployed.key,
+        deployed_var.name,
+        b"deployed-secret",
+        policy_for(gen_deployed, deployed_var),
+    )
+    store._set(
+        gen_undeployed.key,
+        undeployed_var.name,
+        b"undeployed-secret",
+        policy_for(gen_undeployed, undeployed_var),
+    )
 
     with TemporaryDirectory() as tmpdir:
         output_dir = Path(tmpdir)
@@ -1526,7 +1575,7 @@ def test_age_fix_skips_when_recipients_unchanged(
 
     var = make_var("shared_secret", machines=["machine_a", "machine_b"])
     gen = make_generator("shared_gen", Shared(), flake_obj, files=[var])
-    store._set(gen, var, b"shared-value")
+    store._set(gen.key, var.name, b"shared-value", policy_for(gen, var))
 
     secret_file = store.secret_path(gen.key, "shared_secret")
     ciphertext_before = secret_file.read_bytes()
@@ -1555,7 +1604,7 @@ def test_age_fix_reencrypts_when_recipients_changed(
     # Create shared secret encrypted only to machine_a
     var_a = make_var("shared_secret", machines=["machine_a"])
     gen_a = make_generator("shared_gen", Shared(), flake_obj, files=[var_a])
-    store._set(gen_a, var_a, b"shared-value")
+    store._set(gen_a.key, var_a.name, b"shared-value", policy_for(gen_a, var_a))
 
     # Ensure machine_b's key exists before fix() tries to encrypt to it
     store.ensure_machine_key("machine_b")
@@ -1714,7 +1763,7 @@ def test_age_fix_noop_when_nothing_changed(
     # Create a shared secret
     var = make_var("shared_secret", machines=["machine_a", "machine_b"])
     gen = make_generator("shared_gen", Shared(), flake_obj, files=[var])
-    store._set(gen, var, b"shared-value")
+    store._set(gen.key, var.name, b"shared-value", policy_for(gen, var))
 
     secret_file = store.secret_path(gen.key, "shared_secret")
     secret_ciphertext_before = secret_file.read_bytes()

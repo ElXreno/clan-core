@@ -34,12 +34,9 @@ from clan_lib.ssh.upload import upload
 from clan_lib.vars._types import (
     GeneratorId,
     GeneratorStore,
-    PerExport,
-    PerMachine,
-    Shared,
     StoreBase,
+    StoreRequest,
 )
-from clan_lib.vars.var import Var
 
 
 @dataclass
@@ -183,41 +180,23 @@ class SecretStore(StoreBase):
         return None
 
     def _set(
-        self,
-        generator: GeneratorStore,
-        var: Var,
-        value: bytes,
+        self, generator: GeneratorId, name: str, value: bytes, policy: StoreRequest
     ) -> list[Path]:
-        add_machines: list[str] = []
+        add_machines = policy.deploy
+        for m in add_machines:
+            self.ensure_machine_key(m)
+
+        # The first machine (whoever that is)
+        # Defines the sops.groups for a generator
+        # TODO: Resolve this by flake level sops groups
         add_groups: list[str] = []
+        if policy.machines:
+            first_machine = policy.machines[0]
+            add_groups = self.flake.select(
+                vars_sops_default_groups(current_system(), [first_machine])
+            )[first_machine]["sops"]["defaultGroups"]
 
-        match generator.key.placement:
-            case PerMachine(machine=machine):
-                self.ensure_machine_key(machine)
-                add_machines = [machine] if var.deploy else []
-                add_groups = self.flake.select(
-                    vars_sops_default_groups(current_system(), [machine])
-                )[machine]["sops"]["defaultGroups"]
-
-            case Shared():
-                # Shared: add all machines that need this var
-                add_machines = generator.machines if var.deploy else []
-                for m in add_machines:
-                    self.ensure_machine_key(m)
-                # Use generator.machines[0] for groups even if deploy=False
-                first_machine = generator.machines[0]
-                add_groups = self.flake.select(
-                    vars_sops_default_groups(current_system(), [first_machine])
-                )[first_machine]["sops"]["defaultGroups"]
-
-            case PerExport(_):
-                add_machines = generator.machines
-                for m in add_machines:
-                    self.ensure_machine_key(m)
-                # TODO: add the groups feature
-                # add_groups =
-
-        secret_folder = self.secret_path(generator.key, var.name)
+        secret_folder = self.secret_path(generator, name)
         secret_folder.mkdir(parents=True, exist_ok=True)
         encrypt_secret(
             self.clan_dir,

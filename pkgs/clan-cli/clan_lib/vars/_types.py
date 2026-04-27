@@ -76,6 +76,19 @@ Placement = Shared | PerMachine | PerExport
 
 
 @dataclass(frozen=True)
+class StoreRequest:
+    placement: Placement
+    deploy: list[str]  # Empty if not deployed -> Only Admin key gets access
+    # All machines that reference this var.
+    # Used to resolve user/admin recipient keys when deploy is empty.
+    # TODO: This needs to become user based eventually
+    # Currently uses the machine to resolve back to user keys.
+    # That is because there is no user-concept. So we conceptually ask:
+    # Give access to: "admin of webserver" instead of "alice" or "webadmin"
+    machines: list[str]
+
+
+@dataclass(frozen=True)
 class GeneratorId:
     """Identifies a generator uniquely inside a clan.
 
@@ -168,10 +181,7 @@ class StoreBase(ABC):
 
     @abstractmethod
     def _set(
-        self,
-        generator: "GeneratorStore",
-        var: "Var",
-        value: bytes,
+        self, generator: GeneratorId, name: str, value: bytes, policy: StoreRequest
     ) -> list[Path]:
         """Override this method to implement the actual creation of the file"""
 
@@ -287,7 +297,17 @@ class StoreBase(ABC):
             old_val_str = "<not set>"
 
         # Call _set this must be overridden
-        new_file = self._set(generator, var, value)
+        new_file = self._set(
+            generator.key,
+            var.name,
+            value,
+            policy=StoreRequest(
+                placement,
+                # TODO: Update how Var class is constructed to eliminate this if statement
+                deploy=var.machines if var.deploy else [],
+                machines=var.machines,
+            ),
+        )
 
         # Build a logging string
         action_str = "Migrated" if is_migration else "Updated"
