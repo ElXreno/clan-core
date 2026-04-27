@@ -272,6 +272,72 @@
 
                           # Verify the second update was successful
                           machine.succeed("test -f /etc/build-host-update-successful")
+
+
+                          print("TEST: update fails with switch inhibitors and suggests reboot")
+                          # The base machine config already sets
+                          # system.switch.inhibitors.test-component = "original";
+                          # Deploying a different value triggers the inhibitor check.
+                          with open(machine_config_path, "w") as f:
+                              f.write("""
+                          {lib, ...}: {
+                            environment.etc."inhibitor-test-marker".text = "ok";
+                            system.switch.inhibitors.test-component = lib.mkForce "changed";
+                          }
+                          """)
+
+                          # Run clan update — expect failure due to inhibitors.
+                          result = subprocess.run([
+                              "clan",
+                              "machines",
+                              "update",
+                              "--debug",
+                              "--flake", str(flake_dir),
+                              "--host-key-check", "none",
+                              "--upload-inputs",
+                              "test-update-machine",
+                              "--target-host", f"root@192.168.1.1:{ssh_conn.host_port}",
+                          ], capture_output=True, text=True)
+                          assert result.returncode != 0, (
+                              f"Expected update to fail due to switch inhibitors, "
+                              f"but it succeeded.\nstdout: {result.stdout}\nstderr: {result.stderr}"
+                          )
+                          combined = result.stdout + result.stderr
+                          assert "reboot" in combined.lower(), (
+                              f"Error should suggest reboot, got:\n{combined}"
+                          )
+
+                          # Verify: boot entry was registered despite switch failure.
+                          # The profile points to the new config (boot was successful),
+                          # but /run/current-system still points to the old one (switch failed).
+                          # Check that the profile's switch-inhibitors file contains our value.
+                          machine.succeed("grep -q test-component $(readlink -f /nix/var/nix/profiles/system)/switch-inhibitors")
+                          # The marker file must NOT exist because switch was blocked.
+                          machine.fail("test -f /etc/inhibitor-test-marker")
+
+
+                          print("TEST: NIXOS_NO_CHECK=1 forces past switch inhibitors")
+                          # The previous test left the system with test-component="original"
+                          # (switch was blocked, so /run/current-system is unchanged).
+                          # Same config change, but now with NIXOS_NO_CHECK=1 to force through.
+                          os.environ["NIXOS_NO_CHECK"] = "1"
+                          try:
+                              subprocess.run([
+                                  "clan",
+                                  "machines",
+                                  "update",
+                                  "--debug",
+                                  "--flake", str(flake_dir),
+                                  "--host-key-check", "none",
+                                  "--upload-inputs",
+                                  "test-update-machine",
+                                  "--target-host", f"root@192.168.1.1:{ssh_conn.host_port}",
+                              ], check=True)
+                          finally:
+                              del os.environ["NIXOS_NO_CHECK"]
+
+                          # Now the switch succeeded — marker file must exist.
+                          machine.succeed("test -f /etc/inhibitor-test-marker")
                     '';
                 }
               );

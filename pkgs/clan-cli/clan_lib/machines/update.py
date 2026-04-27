@@ -381,7 +381,16 @@ def _nixos_activate(
     install_bootloader: bool = False,
     specialisation: str | None = None,
 ) -> None:
-    """Set the system profile and run switch-to-configuration on the target.
+    """Set the system profile, register the boot entry, and try live-switching.
+
+    Strategy:
+    1. Set the system profile (``nix-env --set``).
+    2. Run ``switch-to-configuration boot`` — this always registers the new
+       generation in the bootloader so the next reboot picks it up.
+    3. Try ``switch-to-configuration switch`` to activate immediately.
+       If it fails because of switch inhibitors (critical component changes
+       like dbus/systemd), report the failure with a reboot suggestion
+       instead of retrying blindly.
 
     Uses ``systemd-run --pipe --quiet`` so the activation survives SSH
     connection drops, while still streaming stdout/stderr back to us
@@ -419,6 +428,12 @@ def _nixos_activate(
         ),
     )
 
+    switch_bin = (
+        f"{config_path}/specialisation/{specialisation}"
+        if specialisation
+        else config_path
+    ) + "/bin/switch-to-configuration"
+
     # Build the systemd-run wrapper command.
     # --pipe:    connect unit's stdin/stdout/stderr to our own, so output
     #            is streamed directly — no need for a journalctl sidecar.
@@ -429,8 +444,9 @@ def _nixos_activate(
     # --collect: remove the transient unit after it finishes.
     # Include a random suffix to avoid conflicts with a previous run that
     # may still be shutting down (e.g. after Ctrl-C).
-    def switch_cmd(unit: str) -> list[str]:
-        return [
+    def switch_cmd(action: str) -> list[str]:
+        unit = f"clan-{action}-{machine_name}-{uuid.uuid4().hex[:8]}"
+        cmd = [
             "systemd-run",
             "--pipe",
             "--wait",
@@ -441,22 +457,41 @@ def _nixos_activate(
             f"--unit={unit}",
             "-E",
             "LOCALE_ARCHIVE",
-            # NIXOS_NO_CHECK=1 overrides switch inhibitors — safety checks
-            # that block activation when critical components (e.g. systemd)
-            # changed between generations.  Forwarded so users can force a
-            # switch instead of rebooting.
-            "-E",
-            "NIXOS_NO_CHECK",
             "-E",
             f"NIXOS_INSTALL_BOOTLOADER={'1' if install_bootloader else '0'}",
-            "--",
-            f"{f'{config_path}/specialisation/{specialisation}' if specialisation else config_path}/bin/switch-to-configuration",
-            "switch",
         ]
+        # Forward NIXOS_NO_CHECK so users can force past switch
+        # inhibitors when they know what they're doing.  Use the
+        # KEY=VALUE form so the value survives the SSH hop — bare
+        # `-E NIXOS_NO_CHECK` only inherits from the remote shell's
+        # environment, which doesn't have it.
+        nixos_no_check = os.environ.get("NIXOS_NO_CHECK")
+        if nixos_no_check:
+            cmd += ["-E", f"NIXOS_NO_CHECK={nixos_no_check}"]
+        cmd += ["--", switch_bin, action]
+        return cmd
 
-    unit_name = f"clan-switch-{machine_name}-{uuid.uuid4().hex[:8]}"
-    ret = target_host_root.run(
-        switch_cmd(unit_name),
+    # --- Step 1: Register the new generation in the bootloader. --------
+    # This ensures the machine boots into the new config even if the live
+    # switch below fails.  ``boot`` never triggers switch inhibitors.
+    boot_ret = target_host_root.run(
+        switch_cmd("boot"),
+        RunOpts(
+            check=False,
+            log=Log.BOTH,
+            prefix=machine_name,
+        ),
+    )
+    if boot_ret.returncode != 0:
+        msg = (
+            f"switch-to-configuration boot failed on '{machine_name}' "
+            f"(exit code {boot_ret.returncode}). See above for details."
+        )
+        raise ClanError(msg)
+
+    # --- Step 2: Try to live-switch into the new configuration. --------
+    switch_ret = target_host_root.run(
+        switch_cmd("switch"),
         RunOpts(
             check=False,
             log=Log.BOTH,
@@ -464,48 +499,38 @@ def _nixos_activate(
         ),
     )
 
-    if ret.returncode == 0:
+    if switch_ret.returncode == 0:
         return
 
-    # First attempt failed — could be SSH drop or real failure.
+    # Check whether the failure is due to switch inhibitors.
+    combined_output = (switch_ret.stdout or "") + (switch_ret.stderr or "")
+    if "Pre-switch check" in combined_output or "switchInhibitors" in combined_output:
+        msg = (
+            f"Live-switching '{machine_name}' was blocked by switch inhibitors "
+            f"(critical system components changed).\n"
+            f"The new configuration has been registered for the next boot.\n"
+            f"Please reboot '{machine_name}' to complete the update.\n"
+            f"To force a live switch despite inhibitors, re-run with --no-check."
+        )
+        raise ClanError(msg)
+
+    # Not an inhibitor failure — could be SSH drop or real error.
     # Retry once (switch-to-configuration is idempotent).
     log.info(
         "[%s] activation returned %d — retrying",
         machine_name,
-        ret.returncode,
+        switch_ret.returncode,
     )
-    last_unit = f"clan-switch-{machine_name}-{uuid.uuid4().hex[:8]}"
-    ret = target_host_root.run(
-        switch_cmd(last_unit),
+    retry_ret = target_host_root.run(
+        switch_cmd("switch"),
         RunOpts(
             check=False,
             log=Log.BOTH,
             prefix=machine_name,
         ),
     )
-    if ret.returncode == 0:
+    if retry_ret.returncode == 0:
         return
-
-    # Both attempts reported failure.  Fetch the journal for diagnostics.
-    journal_output = ""
-    try:
-        journal_ret = target_host_root.run(
-            [
-                "journalctl",
-                "--no-pager",
-                "-n",
-                "50",
-                "-u",
-                last_unit,
-            ],
-            RunOpts(check=False, prefix=machine_name),
-        )
-        if journal_ret.returncode == 0 and journal_ret.stdout.strip():
-            journal_output = (
-                f"\n\nJournal output from unit '{last_unit}':\n{journal_ret.stdout}"
-            )
-    except OSError:
-        log.debug("[%s] failed to fetch journal for unit %s", machine_name, last_unit)
 
     # Final check: the activation may have actually succeeded despite SSH
     # reporting failure (e.g. connection dropped after activation finished).
@@ -523,7 +548,7 @@ def _nixos_activate(
 
     msg = (
         f"switch-to-configuration failed on '{machine_name}' "
-        f"(exit code {ret.returncode}).{journal_output or ' See above for details.'}"
+        f"(exit code {retry_ret.returncode}). See above for details."
     )
     raise ClanError(msg)
 
