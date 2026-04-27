@@ -13,20 +13,19 @@ They also provide optional dashboards for visualization and an alerting system.
 Clients are machines that create metrics and logs.
 Those are sent to the central monitoring server for storage and visualization.
 
-## ncps
+### ncps
 
 - Added the ncps nix proxy binary cache service.
-
 - Standardized exports system with centrally-defined options in clan-core
 
-**Darwin Support**
+### Darwin Support
 
 - Services now support nix-darwin alongside NixOS
 - Service authors can provide `darwinModule` in addition to `nixosModule` in their service definitions
 - WireGuard service now fully supports darwin machines using wg-quick interfaces
 - Added `clan.core.networking.extraHosts` for managing /etc/hosts on darwin via launchd
 
-**SSH Agent Forwarding**
+### SSH Agent Forwarding
 
 - Added configurable SSH agent forwarding for deployments
     - Disabled by default for security
