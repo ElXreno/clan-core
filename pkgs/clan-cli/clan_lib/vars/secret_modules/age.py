@@ -17,13 +17,13 @@ from clan_lib.nix_selectors import vars_age_secret_location, vars_settings_recip
 from clan_lib.ssh.host import Host
 from clan_lib.ssh.upload import upload
 from clan_lib.vars._types import (
-    AccessPolicy,
     GeneratorId,
     GeneratorStore,
     PerExport,
     PerMachine,
     Shared,
     StoreBase,
+    StoreRequest,
 )
 
 log = logging.getLogger(__name__)
@@ -355,7 +355,7 @@ class SecretStore(StoreBase):
     # ── StoreBase implementation ──────────────────────────────────────────
 
     def _set(
-        self, generator: GeneratorId, name: str, value: bytes, policy: AccessPolicy
+        self, generator: GeneratorId, name: str, value: bytes, policy: StoreRequest
     ) -> list[Path]:
         """Encrypt and store a secret to the appropriate machine key(s)."""
         recipients: list[str] = []

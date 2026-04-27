@@ -14,7 +14,7 @@ from clan_cli.vars.generate import generate_command
 from clan_lib.errors import ClanError
 from clan_lib.flake import Flake
 from clan_lib.machines.machines import Machine
-from clan_lib.vars._types import AccessPolicy, GeneratorId, PerMachine, Shared
+from clan_lib.vars._types import GeneratorId, PerMachine, Shared, StoreRequest
 from clan_lib.vars.generator import Generator
 from clan_lib.vars.list import stringify_all_vars
 from clan_lib.vars.secret_modules import age
@@ -84,9 +84,9 @@ def make_generator(
     )
 
 
-def policy_for(gen: Generator, var: Var) -> AccessPolicy:
-    """Build an AccessPolicy from a generator and var for testing."""
-    return AccessPolicy(
+def policy_for(gen: Generator, var: Var) -> StoreRequest:
+    """Build a StoreRequest from a generator and var for testing."""
+    return StoreRequest(
         gen.key.placement,
         deploy=var.machines if var.deploy else [],
         machines=var.machines,

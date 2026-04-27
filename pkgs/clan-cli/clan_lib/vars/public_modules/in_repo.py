@@ -5,7 +5,7 @@ from pathlib import Path
 from clan_lib.errors import ClanError
 from clan_lib.flake import Flake
 from clan_lib.ssh.host import Host
-from clan_lib.vars._types import AccessPolicy, GeneratorId, GeneratorStore, StoreBase
+from clan_lib.vars._types import GeneratorId, GeneratorStore, StoreBase, StoreRequest
 
 
 class VarsStore(StoreBase):
@@ -26,7 +26,7 @@ class VarsStore(StoreBase):
         generator: GeneratorId,
         name: str,
         value: bytes,
-        policy: AccessPolicy,  # noqa: ARG002
+        policy: StoreRequest,  # noqa: ARG002
     ) -> list[Path]:
         if not self.flake.is_local:
             msg = f"Storing var '{generator} / {name}' in a flake is only supported for local flakes: {self.flake}"

@@ -32,10 +32,10 @@ from clan_lib.nix_selectors import vars_sops_default_groups, vars_sops_secret_up
 from clan_lib.ssh.host import Host
 from clan_lib.ssh.upload import upload
 from clan_lib.vars._types import (
-    AccessPolicy,
     GeneratorId,
     GeneratorStore,
     StoreBase,
+    StoreRequest,
 )
 
 
@@ -180,7 +180,7 @@ class SecretStore(StoreBase):
         return None
 
     def _set(
-        self, generator: GeneratorId, name: str, value: bytes, policy: AccessPolicy
+        self, generator: GeneratorId, name: str, value: bytes, policy: StoreRequest
     ) -> list[Path]:
         add_machines = policy.deploy
         for m in add_machines:

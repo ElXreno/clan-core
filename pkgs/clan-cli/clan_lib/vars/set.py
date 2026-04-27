@@ -16,7 +16,7 @@ def _resolve_shared_var(machine: Machine, gen_name: str, var: Var) -> Var:
     """Re-evaluate with all machines so shared generators have the full machine list.
 
     For shared generators, a single-machine evaluation only sees one machine.
-    This re-evaluates all machines so var.machines (and thus AccessPolicy)
+    This re-evaluates all machines so var.machines (and thus StoreRequest)
     reflects the complete declared state from Nix.
     """
     all_machine_names = list(machine.flake.list_machines().keys())

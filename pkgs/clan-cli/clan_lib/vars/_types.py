@@ -76,7 +76,7 @@ Placement = Shared | PerMachine | PerExport
 
 
 @dataclass(frozen=True)
-class AccessPolicy:
+class StoreRequest:
     placement: Placement
     deploy: list[str]  # Empty if not deployed -> Only Admin key gets access
     # All machines that reference this var.
@@ -181,7 +181,7 @@ class StoreBase(ABC):
 
     @abstractmethod
     def _set(
-        self, generator: GeneratorId, name: str, value: bytes, policy: AccessPolicy
+        self, generator: GeneratorId, name: str, value: bytes, policy: StoreRequest
     ) -> list[Path]:
         """Override this method to implement the actual creation of the file"""
 
@@ -301,7 +301,7 @@ class StoreBase(ABC):
             generator.key,
             var.name,
             value,
-            policy=AccessPolicy(
+            policy=StoreRequest(
                 placement,
                 # TODO: Update how Var class is constructed to eliminate this if statement
                 deploy=var.machines if var.deploy else [],

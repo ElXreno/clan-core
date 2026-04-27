@@ -19,7 +19,7 @@ from clan_lib.nix_selectors import (
 )
 from clan_lib.ssh.host import Host
 from clan_lib.ssh.upload import upload
-from clan_lib.vars._types import AccessPolicy, GeneratorId, GeneratorStore, StoreBase
+from clan_lib.vars._types import GeneratorId, GeneratorStore, StoreBase, StoreRequest
 
 log = logging.getLogger(__name__)
 
@@ -106,7 +106,7 @@ class SecretStore(StoreBase):
         generator: GeneratorId,
         name: str,
         value: bytes,
-        policy: AccessPolicy,  # noqa: ARG002
+        policy: StoreRequest,  # noqa: ARG002
     ) -> list[Path]:
         pass_call = ["insert", "-m", str(self.entry_dir(generator, name))]
         self._run_pass(*pass_call, input=value, check=True)
