@@ -54,6 +54,10 @@
 
             environment.etc."install-successful".text = "ok";
 
+            # Pre-seed a switch inhibitor so the VM test can trigger a
+            # blocking inhibitor change by deploying a different value.
+            system.switch.inhibitors.test-component = "original";
+
             # Enable SSH and add authorized key for testing
             services.openssh.enable = true;
             services.openssh.settings.PasswordAuthentication = false;

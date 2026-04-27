@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 import sys
 from functools import partial
 from typing import TYPE_CHECKING, get_args
@@ -164,6 +165,8 @@ def get_machines_for_update(
 
 
 def update_command(args: argparse.Namespace) -> None:
+    if args.no_check:
+        os.environ["NIXOS_NO_CHECK"] = "1"
     try:
         flake = require_flake(args.flake)
         machines_to_update = get_machines_for_update(flake, args.machines, args.tags)
@@ -288,5 +291,12 @@ def register_update_parser(parser: argparse.ArgumentParser) -> None:
         "Specialisations are named, pre-built alternative system configurations "
         "that can be switched to without rebuilding. "
         f"See {specialisation_guide}",
+    )
+    parser.add_argument(
+        "--no-check",
+        action="store_true",
+        help="Skip NixOS pre-switch safety checks (switch inhibitors). "
+        "Use when you know the live switch is safe despite critical component changes. "
+        "Equivalent to setting NIXOS_NO_CHECK=1.",
     )
     parser.set_defaults(func=update_command)

@@ -1,3 +1,5 @@
+import os
+from itertools import pairwise
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -291,7 +293,13 @@ def test_run_update_with_network_nixos_systemd_run_path(
     specialisation: str | None,
     expected_switch_path: str,
 ) -> None:
-    """systemd-run's second-to-last argument must embed the correct config/specialisation path."""
+    """systemd-run calls must embed the correct config/specialisation path.
+
+    The new activate flow runs two systemd-run invocations:
+    1. switch-to-configuration boot  (register in bootloader)
+    2. switch-to-configuration switch (live-activate)
+    Both must use the correct binary path.
+    """
     machine = _make_machine("nixos")
 
     with (
@@ -316,13 +324,163 @@ def test_run_update_with_network_nixos_systemd_run_path(
             specialisation=specialisation,
         )
 
-    # Find the systemd-run call among all target_host_root.run invocations.
+    # Find all systemd-run calls among target_host_root.run invocations.
     systemd_run_calls = [
         c
         for c in mock_target_host_root.run.call_args_list
         if isinstance(c.args[0], list) and c.args[0][0] == "systemd-run"
     ]
-    assert systemd_run_calls, "target_host_root.run was never called with systemd-run"
+    assert len(systemd_run_calls) >= 2, (
+        "expected at least 2 systemd-run calls (boot + switch), "
+        f"got {len(systemd_run_calls)}"
+    )
 
-    cmd: list[str] = systemd_run_calls[0].args[0]
-    assert cmd[-2] == expected_switch_path
+    # First call: switch-to-configuration boot
+    boot_cmd: list[str] = systemd_run_calls[0].args[0]
+    assert boot_cmd[-2] == expected_switch_path
+    assert boot_cmd[-1] == "boot"
+
+    # Second call: switch-to-configuration switch
+    switch_cmd: list[str] = systemd_run_calls[1].args[0]
+    assert switch_cmd[-2] == expected_switch_path
+    assert switch_cmd[-1] == "switch"
+
+
+def test_nixos_activate_inhibitor_failure_suggests_reboot() -> None:
+    """When switch fails due to switch inhibitors, error must suggest reboot.
+
+    Boot must succeed, switch must fail with inhibitor output, and the
+    resulting ClanError must mention reboot.
+    """
+    machine = _make_machine("nixos")
+
+    def fake_run(cmd: object, _opts: object = None) -> MagicMock:
+        if isinstance(cmd, list) and cmd[0] == "systemd-run":
+            action = cmd[-1]
+            if action == "boot":
+                return _run_result(0)
+            if action == "switch":
+                return _run_result(
+                    1,
+                    stdout=(
+                        "Checking switch inhibitors...\n"
+                        "Pre-switch check 'switchInhibitors' failed\n"
+                        "Pre-switch checks failed\n"
+                    ),
+                )
+        # Default: succeed (test -e, nix-env, readlink, etc.)
+        return _run_result(0)
+
+    with (
+        patch("clan_cli.machines.update.Remote") as mock_remote_cls,
+        patch("clan_lib.machines.update.upload_secret_vars"),
+        patch(
+            "clan_lib.machines.update.nix_metadata",
+            return_value={"path": _FAKE_FLAKE_PATH},
+        ),
+        patch("clan_lib.machines.update._nixos_build", return_value=_FAKE_CONFIG_PATH),
+        patch("clan_lib.machines.update.is_async_cancelled", return_value=False),
+    ):
+        mock_target_host_root = _setup_host_chain(mock_remote_cls)
+        mock_target_host_root.run.side_effect = fake_run
+
+        with pytest.raises(ClanError, match=r"(?s)reboot.*--no-check"):
+            run_update_with_network(
+                machine=machine,
+                build_host=None,
+                upload_inputs=False,
+                host_key_check="none",
+                target_host_override="root@192.0.2.1",
+            )
+
+    # Verify: boot was called, but no retry after inhibitor failure.
+    systemd_run_calls = [
+        c
+        for c in mock_target_host_root.run.call_args_list
+        if isinstance(c.args[0], list) and c.args[0][0] == "systemd-run"
+    ]
+    actions = [c.args[0][-1] for c in systemd_run_calls]
+    assert actions == ["boot", "switch"], (
+        f"Expected exactly boot + switch (no retry), got {actions}"
+    )
+
+
+def test_nixos_activate_forwards_nixos_no_check() -> None:
+    """NIXOS_NO_CHECK=1 in local env must be forwarded as KEY=VALUE via -E."""
+    machine = _make_machine("nixos")
+
+    with (
+        patch("clan_cli.machines.update.Remote") as mock_remote_cls,
+        patch("clan_lib.machines.update.upload_secret_vars"),
+        patch(
+            "clan_lib.machines.update.nix_metadata",
+            return_value={"path": _FAKE_FLAKE_PATH},
+        ),
+        patch("clan_lib.machines.update._nixos_build", return_value=_FAKE_CONFIG_PATH),
+        patch("clan_lib.machines.update.is_async_cancelled", return_value=False),
+        patch.dict("os.environ", {"NIXOS_NO_CHECK": "1"}),
+    ):
+        mock_target_host_root = _setup_host_chain(mock_remote_cls)
+        mock_target_host_root.run.return_value = _run_result(0)
+
+        run_update_with_network(
+            machine=machine,
+            build_host=None,
+            upload_inputs=False,
+            host_key_check="none",
+            target_host_override="root@192.0.2.1",
+        )
+
+    systemd_run_calls = [
+        c
+        for c in mock_target_host_root.run.call_args_list
+        if isinstance(c.args[0], list) and c.args[0][0] == "systemd-run"
+    ]
+    for call in systemd_run_calls:
+        cmd: list[str] = call.args[0]
+        # -E NIXOS_NO_CHECK=1 must appear as consecutive elements
+        pairs = list(pairwise(cmd))
+        assert ("-E", "NIXOS_NO_CHECK=1") in pairs, (
+            f"NIXOS_NO_CHECK=1 not forwarded in: {cmd}"
+        )
+
+
+def test_nixos_activate_omits_nixos_no_check_when_unset() -> None:
+    """When NIXOS_NO_CHECK is not in the environment, it must not appear in the command."""
+    machine = _make_machine("nixos")
+
+    # Ensure NIXOS_NO_CHECK is NOT set
+    env_without = {k: v for k, v in os.environ.items() if k != "NIXOS_NO_CHECK"}
+
+    with (
+        patch("clan_cli.machines.update.Remote") as mock_remote_cls,
+        patch("clan_lib.machines.update.upload_secret_vars"),
+        patch(
+            "clan_lib.machines.update.nix_metadata",
+            return_value={"path": _FAKE_FLAKE_PATH},
+        ),
+        patch("clan_lib.machines.update._nixos_build", return_value=_FAKE_CONFIG_PATH),
+        patch("clan_lib.machines.update.is_async_cancelled", return_value=False),
+        patch.dict("os.environ", env_without, clear=True),
+    ):
+        mock_target_host_root = _setup_host_chain(mock_remote_cls)
+        mock_target_host_root.run.return_value = _run_result(0)
+
+        run_update_with_network(
+            machine=machine,
+            build_host=None,
+            upload_inputs=False,
+            host_key_check="none",
+            target_host_override="root@192.0.2.1",
+        )
+
+    systemd_run_calls = [
+        c
+        for c in mock_target_host_root.run.call_args_list
+        if isinstance(c.args[0], list) and c.args[0][0] == "systemd-run"
+    ]
+    for call in systemd_run_calls:
+        cmd_str = " ".join(call.args[0])
+        assert "NIXOS_NO_CHECK" not in cmd_str, (
+            f"NIXOS_NO_CHECK should not appear when unset: {call.args[0]}"
+        )

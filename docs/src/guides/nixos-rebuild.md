@@ -24,14 +24,16 @@ Clan doesn't replace `nixos-rebuild` - it enhances it. When you run `clan machin
 
 1. Generates and uploads secrets/variables (if any)
 2. Uploads the flake source to the target/build host (if needed)
-3. Runs `nixos-rebuild switch` with the appropriate options
-4. Handles remote building and deployment automatically
+3. Builds the NixOS system closure
+4. Sets the system profile (`nix-env --set`)
+5. Runs `switch-to-configuration boot` to register the new generation in the bootloader
+6. Runs `switch-to-configuration switch` to live-activate the new configuration
+7. If the live switch is blocked by switch inhibitors (critical component changes
+   like dbus or systemd), reports the failure and suggests rebooting — the new
+   configuration is already registered for the next boot
 
-Under the hood, Clan executes commands like:
-
-```bash
-nixos-rebuild switch --fast --build-host buildHost --flake /path/to/flake#machine-name
-```
+You can pass `--no-check` (or set `NIXOS_NO_CHECK=1`) to force past switch
+inhibitors when you know the live switch is safe.
 
 ### When You Need `clan vars upload`
 
