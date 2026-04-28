@@ -1,7 +1,6 @@
 import type { Plugin } from "unified";
 import type { Root } from "mdast";
-import { docsBase } from "../../clan-site.config.ts";
-import { versionedBase } from "../../src/lib/models/docs/docs.server.ts";
+import * as config from "../../clan-site.config.ts";
 import { visit } from "unist-util-visit";
 
 /**
@@ -10,12 +9,12 @@ import { visit } from "unist-util-visit";
 const remarkDocsLinks: Plugin<[], Root> = function () {
   return (tree) => {
     visit(tree, ["link", "definition"] as const, (node) => {
-      if (!node.url.startsWith(`${docsBase}/`)) {
+      if (!node.url.startsWith(`${config.docsBase}/`)) {
         return;
       }
 
-      const path = node.url.slice(docsBase.length + 1);
-      node.url = `${versionedBase}${path ? `/${path}` : ""}`;
+      const path = node.url.slice(config.docsBase.length + 1);
+      node.url = `${config.docsBase}/${config.version}${path ? `/${path}` : ""}`;
     });
   };
 };

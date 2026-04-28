@@ -6,7 +6,6 @@ import * as siteConfig from "./clan-site.config.ts";
 import { sveltekit } from "@sveltejs/kit/vite";
 import svg from "@poppanator/sveltekit-svg";
 import value from "vite-plugin-value";
-import { versionedBase } from "#lib/models/docs/docs.server.ts";
 import versions from "./support/vite-plugin-versions.ts";
 
 export default defineConfig(({ mode }) => {
@@ -47,7 +46,7 @@ export default defineConfig(({ mode }) => {
         staticDir: "static",
         assetsDir: `build/_assets/${siteConfig.version}`,
         bundleDir: "_pagefind/docs",
-        base: versionedBase,
+        base: `${siteConfig.docsBase}/${siteConfig.version}`,
         pagefindOptions: {
           writePlayground: DEV,
         },

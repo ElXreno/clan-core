@@ -152,7 +152,20 @@ export function base({
         yoda: "error",
         "unicode-bom": "error",
         "@typescript-eslint/consistent-type-exports": "error",
-        "@typescript-eslint/consistent-type-imports": "error",
+        "@typescript-eslint/consistent-type-imports": [
+          "error",
+          {
+            // Being able to do
+            //
+            // let val: typeof import("foo")
+            //
+            // is simpler than (also obviates the need for a new name):
+            //
+            // import type * as foo from "foo";
+            // let val: typeof foo;
+            disallowTypeAnnotations: false,
+          },
+        ],
         "@typescript-eslint/class-methods-use-this": [
           "error",
           { ignoreOverrideMethods: true },
@@ -324,8 +337,6 @@ export function base({
     {
       files: ["**/*.d.ts"],
       rules: {
-        // Ambient declarations might use import()
-        "@typescript-eslint/consistent-type-imports": "off",
         // Module argument files can use `export {}`
         "import/no-empty-named-blocks": "off",
       },

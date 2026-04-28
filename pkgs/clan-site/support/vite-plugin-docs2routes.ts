@@ -3,10 +3,14 @@
 // import specifier like #lib, which won't work in an independent package
 import type { PluginOption } from "vite";
 import * as config from "#config";
-import path from "node:path";
+import pathutil from "node:path";
 import { ServerDocs } from "#lib/models/docs/docs.server.ts";
 import { spawn } from "node:child_process";
 
+const siteConfigPath = pathutil.resolve(
+  import.meta.dirname,
+  "../clan-site.config.ts",
+);
 export default function vitePluginDocs2routes(): PluginOption {
   let docs: ServerDocs;
   return {
@@ -34,8 +38,14 @@ export default function vitePluginDocs2routes(): PluginOption {
         );
       }
 
-      server.watcher.add([dir]);
+      server.watcher.add([siteConfigPath, dir]);
       server.watcher.on("change", (filename) => {
+        if (filename === siteConfigPath) {
+          (async (): Promise<void> => {
+            docs = await ServerDocs.init();
+          })();
+          return;
+        }
         if (!isRenderable(filename)) {
           return;
         }
@@ -64,10 +74,10 @@ export default function vitePluginDocs2routes(): PluginOption {
 }
 
 async function run_git_clean(): Promise<number | null> {
-  const dir = path.resolve(import.meta.dirname, "../src/routes");
+  const dir = pathutil.resolve(import.meta.dirname, "../src/routes");
   const args = ["clean", "-dfx", dir];
   const p = spawn("git", args, {
-    cwd: path.resolve(import.meta.dirname, ".."),
+    cwd: pathutil.resolve(import.meta.dirname, ".."),
   });
   const { resolve, reject, promise } = Promise.withResolvers<number | null>();
   p.on("error", (code) => {
@@ -81,12 +91,12 @@ async function run_git_clean(): Promise<number | null> {
 
 // Generate types with svelte-kit sync
 async function run_sveltekit_sync(): Promise<number | null> {
-  const cmd = path.resolve(
+  const cmd = pathutil.resolve(
     import.meta.dirname,
     "../node_modules/.bin/svelte-kit",
   );
   const p = spawn(cmd, ["sync"], {
-    cwd: path.resolve(import.meta.dirname, ".."),
+    cwd: pathutil.resolve(import.meta.dirname, ".."),
   });
   const { resolve, reject, promise } = Promise.withResolvers<number | null>();
   p.on("error", (code) => {
