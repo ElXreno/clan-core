@@ -8,14 +8,12 @@ import type {
   NavSibling,
 } from "#lib/models/docs.ts";
 import type { ServerDocs } from "./docs.server.ts";
-import { docsNav } from "#config";
-import { toDocsPath } from "./docs.server.ts";
 import { visit } from "#lib/util.ts";
 
 export class ServerNav {
   public static async init(docs: ServerDocs): Promise<ServerNav> {
     const nav = new ServerNav(docs);
-    nav.#items = await nav.#toNavItems(docsNav);
+    nav.#items = await nav.#toNavItems(docs.config.docsNav);
     return nav;
   }
 
@@ -34,7 +32,7 @@ export class ServerNav {
       if ("children" in navItem || !("path" in navItem)) {
         return;
       }
-      if (navItem.path === toDocsPath(path)) {
+      if (navItem.path === this.#docs.toDocsPath(path)) {
         pointer.push(...parents.map((parent) => parent.index), i);
       }
     });
@@ -60,7 +58,7 @@ export class ServerNav {
         return "break";
       }
       pathItems.push(navItem);
-      if (navItem.path !== toDocsPath(path)) {
+      if (navItem.path !== this.#docs.toDocsPath(path)) {
         return;
       }
       index = pathItems.length - 1;
@@ -86,7 +84,7 @@ export class ServerNav {
     if (typeof navItem === "string") {
       return {
         label: this.#docs.pathTitleMap[navItem] || "<Missing Page>",
-        path: toDocsPath(navItem),
+        path: this.#docs.toDocsPath(navItem),
       };
     }
 
@@ -102,7 +100,7 @@ export class ServerNav {
     if ("path" in navItem) {
       return {
         label: navItem.label,
-        path: toDocsPath(navItem.path),
+        path: this.#docs.toDocsPath(navItem.path),
       };
     }
 
@@ -130,7 +128,7 @@ export class ServerNav {
       .toSorted((a, b) => a.localeCompare(b))
       .map((path) => ({
         label: this.#docs.pathTitleMap[path] || "<Missing Page>",
-        path: toDocsPath(path),
+        path: this.#docs.toDocsPath(path),
       }));
   }
 }

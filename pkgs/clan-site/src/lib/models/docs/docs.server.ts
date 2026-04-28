@@ -5,7 +5,6 @@ import {
   asyncMapObjectValues,
   mapObjectValues,
 } from "#lib/util.ts";
-import * as config from "#config";
 import { mkdir, opendir, readFile, rm, writeFile } from "node:fs/promises";
 import pathutil from "node:path";
 import { ServerNav } from "./nav.server.ts";
@@ -21,20 +20,22 @@ const layoutDir = pathutil.resolve(
   "../../../routes/(docs)/",
 );
 
-export const versionedBase: DocsPath = `${config.docsBase}/${config.version}`;
-
-// This is identical to the same function in ./docs.svelte.ts, but this
-// implementation uses values supported by nodejs
-export function toDocsPath(path: string): DocsPath {
-  if (!path) {
-    return versionedBase;
-  }
-  return `${versionedBase}/${path}`;
-}
+type Config = typeof import("#config");
 
 export class ServerDocs {
   public static async init(): Promise<ServerDocs> {
-    const docs = new ServerDocs(config.docsSrcDirs);
+    // Use async import so that calling this method again reloads the config
+    // file, this reloading is done by by the docs2routes vite plugin. It's
+    // import to specify an absolute path, otherwise vite will fail to resolve
+    // the path, probably because it does some preprocessing the vite.config.ts
+    // before letting node load it
+    const config = (await import(
+      pathutil.resolve(
+        import.meta.dirname,
+        `../../../../clan-site.config.ts?t=${Date.now()}`,
+      )
+    )) as Config;
+    const docs = new ServerDocs(config);
     await docs.#renderAllFiles();
     return docs;
   }
@@ -42,10 +43,13 @@ export class ServerDocs {
   public filenamePathMap: Record<string, string | undefined> = {};
   public pathTitleMap: Record<string, string | undefined> = {};
   public nav!: ServerNav;
-  #dirs: readonly string[];
+  public readonly config: Config;
+  public get versionedBase(): DocsPath {
+    return `${this.config.docsBase}/${this.config.version}`;
+  }
 
-  private constructor(dirs: readonly string[]) {
-    this.#dirs = dirs;
+  private constructor(config: Config) {
+    this.config = config;
   }
 
   public async renderFile(filename: string): Promise<void> {
@@ -53,7 +57,7 @@ export class ServerDocs {
     if (path === undefined) {
       return;
     }
-    const output = await compileFile(filename);
+    const output = await this.#compileFile(filename);
     await this.#writeFile(path, output);
   }
 
@@ -63,7 +67,7 @@ export class ServerDocs {
       return;
     }
     this.filenamePathMap[filename] = undefined;
-    this.pathTitleMap[filename] = undefined;
+    this.pathTitleMap[path] = undefined;
     const dir = pathutil.join(articlesDir, path);
     await Promise.all([
       rm(pathutil.join(dir, "+page.ts")),
@@ -71,9 +75,16 @@ export class ServerDocs {
     ]);
   }
 
+  public toDocsPath(path: string): DocsPath {
+    if (!path) {
+      return this.versionedBase;
+    }
+    return `${this.versionedBase}/${path}`;
+  }
+
   async #renderAllFiles(): Promise<void> {
     const filenamePathMap: Record<string, string> = {};
-    for (const dir of this.#dirs) {
+    for (const dir of this.config.docsSrcDirs) {
       // eslint-disable-next-line no-await-in-loop
       for await (const dirent of await opendir(dir, { recursive: true })) {
         if (!dirent.isFile()) {
@@ -102,7 +113,7 @@ export class ServerDocs {
 
     const outputs = await asyncMapObjectKeyValues(
       filenamePathMap,
-      async ([filename, path]) => [path, await compileFile(filename)],
+      async ([filename, path]) => [path, await this.#compileFile(filename)],
     );
     this.filenamePathMap = filenamePathMap;
     this.pathTitleMap = mapObjectValues(outputs, ([, output]) => output.title);
@@ -152,6 +163,34 @@ import type { PageLoad } from "./$types.ts";
 export const load: PageLoad = (): ArticleInput => (${JSON.stringify(article)});
 `;
   }
+
+  async #compileFile(filename: string): Promise<sveltemd.Output> {
+    return filename.endsWith(".md")
+      ? await this.#compileMarkdownFile(filename)
+      : await compileSvelteFile(filename);
+  }
+
+  async #compileMarkdownFile(filename: string): Promise<sveltemd.Output> {
+    let source = await readFile(filename, { encoding: "utf8" });
+    source = source.replaceAll("```shellSession", "```console");
+    source = source.replaceAll("'/dev/sd<X>'", "`/dev/sd<X>`");
+    source = source.replaceAll(
+      /<div\sclass="grid cards"\smarkdown>(?<md>.+?)<\/div>/gs,
+      "$1",
+    );
+    source = replaceCodeLang(source, filename);
+    source = replaceButtonSyntax(source);
+    const output = await sveltemd.compile(source, {
+      root: pathutil.dirname(import.meta.dirname),
+      filename,
+      codeLightTheme: this.config.codeLightTheme,
+      codeDarkTheme: this.config.codeDarkTheme,
+      minLineNumberLines: this.config.codeMinLineNumberLines,
+      maxTocDepth: this.config.maxTocDepth,
+      codeEmbedDir: this.config.docsCodeEmbedsDir,
+    });
+    return output;
+  }
 }
 
 function pageSvelteContent(output: sveltemd.Output): string {
@@ -181,34 +220,6 @@ import type { NavItemsInput } from "$lib/models/docs.ts";
 
 export const load: LayoutLoad = (): { navItems: NavItemsInput } => (${JSON.stringify({ navItems })});
 `;
-}
-
-async function compileFile(filename: string): Promise<sveltemd.Output> {
-  return filename.endsWith(".md")
-    ? await compileMarkdownFile(filename)
-    : await compileSvelteFile(filename);
-}
-
-async function compileMarkdownFile(filename: string): Promise<sveltemd.Output> {
-  let source = await readFile(filename, { encoding: "utf8" });
-  source = source.replaceAll("```shellSession", "```console");
-  source = source.replaceAll("'/dev/sd<X>'", "`/dev/sd<X>`");
-  source = source.replaceAll(
-    /<div\sclass="grid cards"\smarkdown>(?<md>.+?)<\/div>/gs,
-    "$1",
-  );
-  source = replaceCodeLang(source, filename);
-  source = replaceButtonSyntax(source);
-  const output = await sveltemd.compile(source, {
-    root: pathutil.dirname(import.meta.dirname),
-    filename,
-    codeLightTheme: config.codeLightTheme,
-    codeDarkTheme: config.codeDarkTheme,
-    minLineNumberLines: config.codeMinLineNumberLines,
-    maxTocDepth: config.maxTocDepth,
-    codeEmbedDir: config.docsCodeEmbedsDir,
-  });
-  return output;
 }
 
 async function compileSvelteFile(filename: string): Promise<sveltemd.Output> {
