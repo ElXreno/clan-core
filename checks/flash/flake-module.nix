@@ -1,67 +1,41 @@
 {
-  config,
   self,
   lib,
   ...
-}:
+}@flakeModule:
 let
-  test-install-machine-without-system = ../installation/installation-machine.nix;
+  importFlake =
+    flakeDir:
+    let
+      flakeExpr = import (flakeDir + "/flake.nix");
+      inputs = lib.intersectAttrs flakeExpr.inputs self.inputs;
+      flake = flakeExpr.outputs (
+        inputs
+        // {
+          self = flake // {
+            outPath = flakeDir;
+          };
+          clan-core = self;
+          systems = builtins.toFile "flake.systems.nix" ''
+            [ "x86_64-linux" "aarch64-linux" ]
+          '';
+        }
+      );
+    in
+    lib.throwIf (lib.pathExists (
+      flakeDir + "/flake.lock"
+    )) "checks/flash/ must not have a flake.lock file" flake;
+
+  testFlake = importFlake ./.;
 in
 {
-  clan.machines = lib.genAttrs' (lib.filter (lib.hasSuffix "linux") config.systems) (system: {
-    name = "test-flash-machine-${system}";
-    value =
-      { lib, ... }:
-      {
-        # We need to use `mkForce` because we inherit from `test-install-machine`
-        # which currently hardcodes `nixpkgs.hostPlatform`
-        nixpkgs.hostPlatform = lib.mkForce system;
-
-        imports = [ test-install-machine-without-system ];
-
-        clan.core.networking.targetHost = "test-flash-machine";
-
-        # We don't want our system to define any `vars` generators as these can't
-        # be generated as the flake is inside `/nix/store`.
-        clan.core.settings.state-version.enable = false;
-        clan.core.vars.generators.test-partitioning = lib.mkForce { };
-        disko.devices.disk.main.preCreateHook = lib.mkForce "";
-
-        # Every option here should match the options set through `clan flash write`
-        # if you get a mass rebuild on the disko derivation, this means you need to
-        # adjust something here. Also make sure that the injected json in clan flash write
-        # is up to date.
-        i18n.defaultLocale = "de_DE.UTF-8";
-        console.keyMap = "de";
-        services.xserver.xkb.layout = "de";
-        users.users.root.openssh.authorizedKeys.keys = [
-          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIRWUusawhlIorx7VFeQJHmMkhl9X3QpnvOdhnV/bQNG root@target\n"
-        ];
-      };
-  });
-
   perSystem =
     {
       pkgs,
-      lib,
       ...
     }:
     let
-      clan-core-flake = self.filter {
-        name = "clan-core-flake-filtered";
-        include = [
-          "flake.nix"
-          "flake.lock"
-          "checks"
-          "clanServices"
-          "darwinModules"
-          "flakeModules"
-          "lib"
-          "modules"
-          "nixosModules"
-        ];
-      };
-      nixosConfig = self.nixosConfigurations."test-flash-machine-${pkgs.stdenv.hostPlatform.system}";
+      nixosConfig = testFlake.nixosConfigurations."test-flash-machine-${pkgs.stdenv.hostPlatform.system}";
       #extraSystemConfigJSON = ''{"i18n": {"defaultLocale": "de_DE.UTF-8"}, "console": {"keyMap": "de"}, "services": {"xserver": {"xkb": {"layout": "de"}}}, "users": {"users": {"root": {"openssh": {"authorizedKeys": {"keys": ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIRWUusawhlIorx7VFeQJHmMkhl9X3QpnvOdhnV/bQNG root@target\n"]}}}}}}'';
       extraSystemConfig = {
         i18n.defaultLocale = "de_DE.UTF-8";
@@ -99,6 +73,57 @@ in
       installSystemClosureInfo = installSystem.pkgs.closureInfo {
         rootPaths = [ installSystem.config.system.build.toplevel ];
       };
+
+      # Filtered clan-core source used as the `clan-core` input of the flash
+      # child flake when we lock it for offline use inside the VM. Using a
+      # whitelist (`include`) keeps this source hash stable against irrelevant
+      # changes at the repo root so checks/dont-depend-on-repo-root.nix stays
+      # green.
+      clan-core-flake-filtered = self.filter {
+        name = "clan-core-flake-filtered";
+        include = [
+          "flake.nix"
+          "flake.lock"
+          "checks"
+          "clanServices"
+          "darwinModules"
+          "flakeModules"
+          "lib"
+          "modules"
+          "nixosModules"
+        ];
+      };
+
+      systemsFile = builtins.toFile "flake.systems.nix" ''[ "${pkgs.stdenv.hostPlatform.system}" ]'';
+
+      # Offline-locked copy of the flash child flake. This is what the VM
+      # copies to `/flake` so that `clan flash write --flake /flake
+      # test-flash-machine-${system}` can evaluate the child flake without any
+      # network access. Mirrors the recipe used by lib/clanTest flakeForSandbox.
+      flashTestFlake =
+        pkgs.runCommand "flash-test-flake-${pkgs.stdenv.hostPlatform.system}"
+          {
+            nativeBuildInputs = [ pkgs.nix ];
+          }
+          ''
+            cp -r ${./.} $out
+            chmod +w -R $out
+            export HOME=$(mktemp -d)
+            nix flake lock $out \
+              --extra-experimental-features 'nix-command flakes' \
+              --override-input clan-core ${clan-core-flake-filtered} \
+              --override-input nixpkgs ${self.inputs.nixpkgs} \
+              --override-input systems 'path://${systemsFile}' \
+              --override-input clan-core/nixpkgs ${self.inputs.nixpkgs} \
+              --override-input clan-core/flake-parts ${self.inputs.flake-parts} \
+              --override-input clan-core/treefmt-nix ${self.inputs.treefmt-nix} \
+              --override-input clan-core/nix-select ${self.inputs.nix-select} \
+              --override-input clan-core/data-mesher ${self.inputs.data-mesher} \
+              --override-input clan-core/sops-nix ${self.inputs.sops-nix} \
+              --override-input clan-core/disko ${self.inputs.disko} \
+              --override-input clan-core/systems ${self.inputs.systems}
+          '';
+
       dependencies = [
         pkgs.disko
         pkgs.buildPackages.lndir
@@ -130,10 +155,12 @@ in
         nixosConfig.pkgs.gnupg.src
         nixosConfig.pkgs.libselinux
         nixosConfig.pkgs.libselinux.src
+
+        flashTestFlake
       ]
       ++ builtins.map (i: i.outPath) (builtins.attrValues self.inputs)
-      ++ builtins.map (import ../installation/facter-report.nix) (
-        lib.filter (lib.hasSuffix "linux") config.systems
+      ++ builtins.map (import ./facter-report.nix) (
+        lib.filter (lib.hasSuffix "linux") flakeModule.config.systems
       );
       closureInfo = pkgs.closureInfo { rootPaths = dependencies; };
     in
@@ -174,11 +201,12 @@ in
               #   we cannot setup loop devices for the mount
               testScript = ''
                 start_all()
-                flake_dir = "${clan-core-flake}"
+                flake_dir = "${flashTestFlake}"
                 machine.succeed("echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIRWUusawhlIorx7VFeQJHmMkhl9X3QpnvOdhnV/bQNG root@target' > ./test_id_ed25519.pub")
                 # Some distros like to automount disks with spaces
                 machine.succeed('mkdir -p "/mnt/with spaces" && mkfs.ext4 /dev/vdc && mount /dev/vdc "/mnt/with spaces"')
                 machine.succeed(f"cp -r {flake_dir} /flake")
+                machine.succeed("chmod -R +w /flake")
                 machine.succeed("clan vars keygen --flake /flake </dev/null")
                 machine.succeed("clan flash write --ssh-pubkey ./test_id_ed25519.pub --keymap de --language de_DE.UTF-8 --debug --flake /flake --yes --disk main /dev/vdc test-flash-machine-${pkgs.stdenv.hostPlatform.system}")
               '';
