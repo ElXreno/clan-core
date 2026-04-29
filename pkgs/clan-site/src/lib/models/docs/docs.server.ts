@@ -58,6 +58,11 @@ export class ServerDocs {
       return;
     }
     const output = await this.#compileFile(filename);
+    if (output.title !== this.pathTitleMap[path]) {
+      this.pathTitleMap[path] = output.title;
+      this.nav = await ServerNav.init(this);
+      await this.#writeLayoutFile();
+    }
     await this.#writeFile(path, output);
   }
 
@@ -123,11 +128,15 @@ export class ServerDocs {
       asyncMapObjectValues(outputs, async ([path, output]) => {
         await this.#writeFile(path, output);
       }),
-      writeFile(
-        pathutil.join(layoutDir, "+layout.ts"),
-        layoutContent(this.nav.items),
-      ),
+      this.#writeLayoutFile(),
     ]);
+  }
+
+  async #writeLayoutFile(): Promise<void> {
+    await writeFile(
+      pathutil.join(layoutDir, "+layout.ts"),
+      layoutContent(this.nav.items),
+    );
   }
 
   async #writeFile(path: string, output: sveltemd.Output): Promise<void> {
