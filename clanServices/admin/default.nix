@@ -8,12 +8,12 @@
   roles.default = {
     description = "Placeholder role to apply the admin service";
     perInstance =
-      { ... }:
+      { settings, ... }:
       {
         nixosModule =
-          { ... }:
+          { lib, ... }:
           {
-            warnings = [
+            warnings = lib.mkIf settings.deprecationWarning [
               "The clanServices/admin module is deprecated. See the migration guide: https://docs.clan.lol/main/guides/migrations/migrate-admin-service/"
             ];
           };
@@ -49,6 +49,13 @@
               List of domains to include in the certificate.
               This option will prepend the machine name in front of each domain before adding it to the certificate.
             '';
+          };
+
+          deprecationWarning = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            example = false;
+            internal = true;
           };
         };
       };
