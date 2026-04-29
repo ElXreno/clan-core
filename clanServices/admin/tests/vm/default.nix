@@ -17,6 +17,7 @@ in
           module.input = "self";
           roles.default.machines."server".settings = {
             allowedKeys.testkey = public-key;
+            deprecationWarning = false;
           };
         };
       };
