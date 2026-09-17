@@ -13,7 +13,8 @@
     disko.url = "github:nix-community/disko";
     disko.inputs.nixpkgs.follows = "nixpkgs";
 
-    sops-nix.url = "github:Mic92/sops-nix";
+    # workaround for https://github.com/Mic92/sops-nix/pull/984
+    sops-nix.url = "github:Mic92/sops-nix/16954c1c360c3dc4d4b3b3e64df59f7e89452cb1";
     sops-nix.inputs.nixpkgs.follows = "nixpkgs";
 
     systems.url = "github:nix-systems/default/future-26.11";
