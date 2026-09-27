@@ -11,7 +11,9 @@ log = logging.getLogger(__name__)
 def prune_command(args: argparse.Namespace) -> None:
     flake = require_flake(args.flake)
 
-    orphans = find_orphaned_vars(args.machines or None, flake)
+    orphans = find_orphaned_vars(
+        args.machines or None, flake, generator_names=args.generator
+    )
 
     if not orphans.entries:
         print("No orphaned vars found.")
@@ -42,6 +44,12 @@ def register_prune_parser(parser: argparse.ArgumentParser) -> None:
     )
     add_dynamic_completer(machines_parser, complete_machines)
 
+    parser.add_argument(
+        "--generator",
+        "-g",
+        action="append",
+        help="only prune orphaned vars of this generator. can be given multiple times",
+    )
     parser.add_argument(
         "--dry-run",
         "-n",
