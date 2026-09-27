@@ -277,7 +277,7 @@ def test_prune_via_cli(
     flake.refresh()
 
     # Run prune via CLI (no --dry-run)
-    cli.run(["vars", "prune", "--flake", str(flake.path), "my_machine"])
+    cli.run(["vars", "prune", "--flake", str(flake.path), "my_machine", "--yes"])
 
     # Var should be removed
     flake_obj = Flake(str(flake.path))
@@ -333,7 +333,7 @@ def test_prune_removes_vars_for_machines_no_longer_in_config(
     )
 
     # Prune with no machine arg must walk disk machines, not just config ones
-    cli.run(["vars", "prune", "--flake", str(flake.path)])
+    cli.run(["vars", "prune", "--flake", str(flake.path), "--yes"])
 
     assert not machine_b_dir.exists()
     assert (
@@ -379,7 +379,7 @@ def test_prune_does_not_commit_unrelated_staged_changes(
     ).stdout.split()
     assert "UNRELATED_STAGED.txt" in staged_before
 
-    cli.run(["vars", "prune", "--flake", str(flake.path), "my_machine"])
+    cli.run(["vars", "prune", "--flake", str(flake.path), "my_machine", "--yes"])
 
     # The prune commit must not contain the unrelated file
     commit_files = sp.run(
@@ -433,7 +433,7 @@ def test_prune_all_machines(
     flake.refresh()
 
     # Prune all machines (no machine arg)
-    cli.run(["vars", "prune", "--flake", str(flake.path)])
+    cli.run(["vars", "prune", "--flake", str(flake.path), "--yes"])
 
     flake_obj = Flake(str(flake.path))
     store = in_repo.VarsStore(flake=flake_obj)
@@ -508,9 +508,54 @@ def test_prune_respects_clan_directory(
     orphans = find_orphaned_vars(["my_machine"], Flake(str(flake.path)))
     assert [e.path for e in orphans.entries] == [stale]
 
-    cli.run(["vars", "prune", "--flake", str(flake.path), "my_machine"])
+    cli.run(["vars", "prune", "--flake", str(flake.path), "my_machine", "--yes"])
 
     assert not stale.exists()
     assert (
         clan_dir / "vars" / "per-machine" / "my_machine" / "my_generator" / "my_value"
     ).exists()
+
+
+@pytest.mark.broken_on_darwin
+@pytest.mark.with_core
+def test_prune_asks_for_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+    flake_with_sops: ClanFlake,
+) -> None:
+    """Prune deletes nothing unless the user confirms."""
+    flake = flake_with_sops
+
+    config = flake.machines["my_machine"] = create_test_machine_config()
+    gen = config["clan"]["core"]["vars"]["generators"]["stale_gen"]
+    gen["files"]["stale_val"]["secret"] = False
+    gen["script"] = 'echo -n x > "$out"/stale_val'
+
+    flake.refresh()
+    monkeypatch.chdir(flake.path)
+
+    cli.run(["vars", "generate", "--flake", str(flake.path), "my_machine"])
+
+    flake.machines["my_machine"] = create_test_machine_config()
+    flake.refresh()
+
+    stale_id = GeneratorId(name="stale_gen", placement=PerMachine(machine="my_machine"))
+    store = in_repo.VarsStore(flake=Flake(str(flake.path)))
+
+    prompts: list[str] = []
+
+    def answer(reply: str) -> Callable[[str], str]:
+        def _input(prompt: str) -> str:
+            prompts.append(prompt)
+            return reply
+
+        return _input
+
+    monkeypatch.setattr("builtins.input", answer("n"))
+    cli.run(["vars", "prune", "--flake", str(flake.path), "my_machine"])
+    assert store.exists(stale_id, "stale_val")
+    assert len(prompts) == 1
+
+    monkeypatch.setattr("builtins.input", answer("y"))
+    cli.run(["vars", "prune", "--flake", str(flake.path), "my_machine"])
+    assert not store.exists(stale_id, "stale_val")
+    assert len(prompts) == 2

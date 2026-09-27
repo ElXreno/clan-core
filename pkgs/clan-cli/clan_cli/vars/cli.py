@@ -89,13 +89,16 @@ defined by any generator in the current NixOS configuration.
 Examples:
 
   $ clan vars prune
-  Will find and remove orphaned vars for all machines.
+  Will list orphaned vars for all machines and ask before removing them.
 
   $ clan vars prune [MACHINE]
-  Will find and remove orphaned vars for the specified machine.
+  Will list orphaned vars for the specified machine and ask before removing them.
 
   $ clan vars prune [MACHINE] --dry-run
   Will list orphaned vars without removing them.
+
+  $ clan vars prune --yes
+  Will remove orphaned vars for all machines without asking.
         """
         ),
         formatter_class=HelpFormatter,
