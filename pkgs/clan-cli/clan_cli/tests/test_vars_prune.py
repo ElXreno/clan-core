@@ -15,6 +15,7 @@ from clan_lib.vars.check import check_vars
 from clan_lib.vars.generator import Generator
 from clan_lib.vars.prune import find_orphaned_vars, prune_vars
 from clan_lib.vars.public_modules import in_repo
+from clan_lib.vars.secret_modules import sops
 
 
 @pytest.mark.broken_on_darwin
@@ -765,3 +766,55 @@ def test_prune_keeps_validation_hash_of_live_generator(
     assert not (gen_dir / "my_public").exists()
     assert (gen_dir / ".validation-hash").exists()
     assert check_vars("my_machine", Flake(str(flake.path)))
+
+
+@pytest.mark.broken_on_darwin
+@pytest.mark.with_core
+def test_prune_stale_machine_recipient_of_shared_secret(
+    monkeypatch: pytest.MonkeyPatch,
+    flake_with_sops: ClanFlake,
+) -> None:
+    """A machine that no longer declares a shared generator loses access to
+    its secrets on a whole-clan prune.
+    """
+    flake = flake_with_sops
+
+    for machine in ("machine1", "machine2"):
+        config = flake.machines[machine] = create_test_machine_config()
+        shared_gen = config["clan"]["core"]["vars"]["generators"]["shared_gen"]
+        shared_gen["share"] = True
+        shared_gen["files"]["my_secret"]["secret"] = True
+        shared_gen["script"] = 'echo -n secret > "$out"/my_secret'
+
+    flake.refresh()
+    monkeypatch.chdir(flake.path)
+
+    cli.run(["vars", "generate", "--flake", str(flake.path)])
+
+    flake_obj = Flake(str(flake.path))
+    sops_store = sops.SecretStore(flake_obj)
+    shared_id = GeneratorId(name="shared_gen", placement=Shared())
+    link = sops_store.secret_path(shared_id, "my_secret") / "machines" / "machine2"
+    assert link.is_symlink()
+    assert sops_store.machine_has_access(shared_id, "my_secret", "machine2")
+
+    flake.machines["machine2"] = create_test_machine_config()
+    flake.refresh()
+
+    cli.run(["vars", "prune", "--flake", str(flake.path), "machine2", "--yes"])
+    assert link.is_symlink()
+
+    cli.run(["vars", "prune", "--flake", str(flake.path), "--yes"])
+
+    assert not link.exists()
+    assert not sops_store.machine_has_access(shared_id, "my_secret", "machine2")
+    assert sops_store.machine_has_access(shared_id, "my_secret", "machine1")
+    assert sops_store.exists(shared_id, "my_secret")
+    status = sp.run(
+        ["git", "status", "--porcelain"],
+        cwd=flake.path,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert status == ""

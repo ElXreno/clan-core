@@ -15,11 +15,9 @@ def prune_command(args: argparse.Namespace) -> None:
         args.machines or None, flake, generator_names=args.generator
     )
 
-    if not orphans.entries:
-        print("No orphaned vars found.")
+    print(orphans.text())
+    if orphans.empty:
         return
-
-    print(f"Found orphaned vars:\n{orphans.text()}")
 
     if args.dry_run:
         return

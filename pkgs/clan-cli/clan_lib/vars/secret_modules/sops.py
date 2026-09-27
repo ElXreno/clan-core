@@ -18,6 +18,7 @@ from clan_cli.secrets.secrets import (
     collect_keys_for_path,
     decrypt_secret,
     decrypt_secret_raw,
+    disallow_member,
     encrypt_secret,
     groups_folder,
     has_secret,
@@ -331,6 +332,21 @@ class SecretStore(StoreBase):
             secret_folder,
             age_plugins=load_age_plugins(self.flake),
             flake_dir=self.flake.path,
+        )
+
+    def machines_with_access(self, generator: GeneratorId, name: str) -> set[str]:
+        machines_dir = self.secret_path(generator, name) / "machines"
+        if not machines_dir.is_dir():
+            return set()
+        return {p.name for p in machines_dir.iterdir()}
+
+    def revoke_machine_access(
+        self, generator: GeneratorId, name: str, machine: str
+    ) -> list[Path]:
+        return disallow_member(
+            self.secret_path(generator, name) / "machines",
+            machine,
+            age_plugins=load_age_plugins(self.flake),
         )
 
     def collect_keys_for_secret(self, machine: str, path: Path) -> set[sops.SopsKey]:
