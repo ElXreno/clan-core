@@ -215,9 +215,7 @@ def _commit_removals(
         )
         run(cmd, RunOpts(log=Log.BOTH, error_msg="Failed to stage removed files"))
 
-        # Check if our specific paths have anything staged. Scoping the diff to
-        # our own paths ensures we don't commit unrelated staged changes the
-        # user might already have in the index.
+        # untracked removed paths are not valid commit pathspecs
         cmd = nix_shell(
             ["git"],
             [
@@ -226,14 +224,16 @@ def _commit_removals(
                 str(flake_dir),
                 "diff",
                 "--cached",
-                "--exit-code",
-                "--quiet",
+                "--name-only",
+                "--diff-filter=D",
+                "-z",
                 "--",
                 *path_strs,
             ],
         )
-        result = run(cmd, RunOpts(check=False, cwd=flake_dir))
-        if result.returncode == 0:
+        result = run(cmd, RunOpts(cwd=flake_dir))
+        staged = [p for p in result.stdout.split("\0") if p]
+        if not staged:
             return
 
         # --only -- <paths> restricts the commit to our pathspec, leaving any
@@ -250,7 +250,7 @@ def _commit_removals(
                 "--no-verify",
                 "--only",
                 "--",
-                *path_strs,
+                *staged,
             ],
         )
         run(cmd, RunOpts(error_msg="Failed to commit removal of orphaned vars"))

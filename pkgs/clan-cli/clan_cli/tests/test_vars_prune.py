@@ -675,3 +675,54 @@ def test_prune_generator_filter(
     assert not exists("gen_a")
     assert exists("gen_b")
     assert not exists("gen_c")
+
+
+@pytest.mark.broken_on_darwin
+@pytest.mark.with_core
+def test_prune_untracked_orphan(
+    monkeypatch: pytest.MonkeyPatch,
+    flake_with_sops: ClanFlake,
+) -> None:
+    """An orphan that git does not know about must not break the commit of the
+    tracked removals.
+    """
+    flake = flake_with_sops
+
+    config = flake.machines["my_machine"] = create_test_machine_config()
+    gen = config["clan"]["core"]["vars"]["generators"]["stale_gen"]
+    gen["files"]["stale_val"]["secret"] = False
+    gen["script"] = 'echo -n x > "$out"/stale_val'
+
+    flake.refresh()
+    monkeypatch.chdir(flake.path)
+
+    cli.run(["vars", "generate", "--flake", str(flake.path), "my_machine"])
+
+    flake.machines["my_machine"] = create_test_machine_config()
+    flake.refresh()
+
+    machine_dir = flake.path / "vars" / "per-machine" / "my_machine"
+    untracked = machine_dir / "untracked_gen" / "val"
+    untracked.mkdir(parents=True)
+    (untracked / "value").write_text("x")
+
+    cli.run(["vars", "prune", "--flake", str(flake.path), "--yes"])
+
+    assert not (machine_dir / "stale_gen").exists()
+    assert not (machine_dir / "untracked_gen").exists()
+    committed = sp.run(
+        ["git", "show", "--name-only", "--format=", "HEAD"],
+        cwd=flake.path,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    assert "vars/per-machine/my_machine/stale_gen/stale_val/value" in committed
+    status = sp.run(
+        ["git", "status", "--porcelain"],
+        cwd=flake.path,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert status == ""
