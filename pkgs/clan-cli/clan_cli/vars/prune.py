@@ -2,6 +2,7 @@ import argparse
 import logging
 
 from clan_cli.completions import add_dynamic_completer, complete_machines
+from clan_lib.api.directory import get_clan_dir
 from clan_lib.flake import require_flake
 from clan_lib.machines.list import list_full_machines
 from clan_lib.vars.prune import find_orphaned_vars, prune_vars
@@ -19,7 +20,7 @@ def prune_command(args: argparse.Namespace) -> None:
         # behind by machines that were fully removed from config also get
         # pruned.
         config_machines = set(list_full_machines(flake).keys())
-        per_machine_base = flake.path / "vars" / "per-machine"
+        per_machine_base = get_clan_dir(flake) / "vars" / "per-machine"
         disk_machines: set[str] = (
             {d.name for d in per_machine_base.iterdir() if d.is_dir()}
             if per_machine_base.exists()

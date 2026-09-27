@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from clan_lib.api.directory import get_clan_dir
 from clan_lib.cmd import Log, RunOpts, run
 from clan_lib.errors import ClanError
 from clan_lib.flake.flake import Flake
@@ -75,8 +76,7 @@ def find_orphaned_vars(
     For shared vars, evaluates all machines to avoid removing shared vars
     still used by other machines.
     """
-    clan_dir = flake.path
-    vars_base = clan_dir / "vars"
+    vars_base = get_clan_dir(flake) / "vars"
     orphans = OrphanedVars()
 
     machine_list = list(machine_names)
@@ -235,7 +235,7 @@ def prune_vars(
 
     Returns a list of removed var directory paths.
     """
-    vars_base = flake.path / "vars"
+    vars_base = get_clan_dir(flake) / "vars"
     removed_paths: list[Path] = []
 
     for entry in orphans.entries:
@@ -269,9 +269,7 @@ def prune_vars(
     for prefix in sorted(machine_prefixes):
         machine_dir = vars_base / prefix
         if machine_dir.exists():
-            remaining = [
-                p for p in machine_dir.iterdir() if not p.name.startswith(".")
-            ]
+            remaining = [p for p in machine_dir.iterdir() if not p.name.startswith(".")]
             if not remaining:
                 shutil.rmtree(machine_dir)
                 removed_paths.append(machine_dir)
