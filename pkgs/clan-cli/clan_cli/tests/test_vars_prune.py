@@ -295,6 +295,15 @@ def test_prune_via_cli(
     gen_dir = flake.path / "vars" / "per-machine" / "my_machine" / "cli_gen"
     assert not gen_dir.exists()
 
+    subject = sp.run(
+        ["git", "log", "-1", "--format=%s"],
+        cwd=flake.path,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert subject == "vars: prune orphaned vars"
+
 
 @pytest.mark.broken_on_darwin
 @pytest.mark.with_core
