@@ -625,3 +625,53 @@ def test_prune_unknown_machine(
 
     store = in_repo.VarsStore(flake=Flake(str(flake.path)))
     assert store.exists(GeneratorId(name="orphan_shared", placement=Shared()), "val")
+
+
+@pytest.mark.broken_on_darwin
+@pytest.mark.with_core
+def test_prune_generator_filter(
+    monkeypatch: pytest.MonkeyPatch,
+    flake_with_sops: ClanFlake,
+) -> None:
+    """--generator limits pruning to the orphans of the named generators."""
+    flake = flake_with_sops
+
+    config = flake.machines["my_machine"] = create_test_machine_config()
+    for name in ("gen_a", "gen_b", "gen_c"):
+        gen = config["clan"]["core"]["vars"]["generators"][name]
+        gen["files"]["val"]["secret"] = False
+        gen["script"] = 'echo -n x > "$out"/val'
+
+    flake.refresh()
+    monkeypatch.chdir(flake.path)
+
+    cli.run(["vars", "generate", "--flake", str(flake.path), "my_machine"])
+
+    flake.machines["my_machine"] = create_test_machine_config()
+    flake.refresh()
+
+    cli.run(
+        [
+            "vars",
+            "prune",
+            "--flake",
+            str(flake.path),
+            "my_machine",
+            "--generator",
+            "gen_a",
+            "-g",
+            "gen_c",
+            "--yes",
+        ]
+    )
+
+    store = in_repo.VarsStore(flake=Flake(str(flake.path)))
+
+    def exists(name: str) -> bool:
+        return store.exists(
+            GeneratorId(name=name, placement=PerMachine(machine="my_machine")), "val"
+        )
+
+    assert not exists("gen_a")
+    assert exists("gen_b")
+    assert not exists("gen_c")
