@@ -7,6 +7,7 @@ import pytest
 from clan_cli.tests.age_keys import SopsSetup
 from clan_cli.tests.fixtures_flakes import ClanFlake, create_test_machine_config
 from clan_cli.tests.helpers import cli
+from clan_lib.errors import ClanError
 from clan_lib.flake import Flake
 from clan_lib.vars._types import GeneratorId, PerMachine, Shared
 from clan_lib.vars.generator import Generator
@@ -167,7 +168,7 @@ def test_prune_shared_vars_only_when_unused_by_all_machines(
     flake.refresh()
 
     flake_obj = Flake(str(flake.path))
-    orphans = find_orphaned_vars(["machine1"], flake_obj)
+    orphans = find_orphaned_vars(None, flake_obj)
     # shared_gen should NOT be orphaned because machine2 still uses it
     shared_orphans = [e for e in orphans.entries if e.placement_prefix == "shared"]
     assert len(shared_orphans) == 0
@@ -204,7 +205,7 @@ def test_prune_shared_vars_when_no_machine_uses_them(
     flake.refresh()
 
     flake_obj = Flake(str(flake.path))
-    orphans = find_orphaned_vars(["my_machine"], flake_obj)
+    orphans = find_orphaned_vars(None, flake_obj)
     shared_orphans = [e for e in orphans.entries if e.placement_prefix == "shared"]
     assert len(shared_orphans) == 1
     assert shared_orphans[0].generator_name == "orphan_shared"
@@ -559,3 +560,68 @@ def test_prune_asks_for_confirmation(
     cli.run(["vars", "prune", "--flake", str(flake.path), "my_machine"])
     assert not store.exists(stale_id, "stale_val")
     assert len(prompts) == 2
+
+
+@pytest.mark.broken_on_darwin
+@pytest.mark.with_core
+def test_prune_machine_filter_keeps_shared_vars(
+    monkeypatch: pytest.MonkeyPatch,
+    flake_with_sops: ClanFlake,
+) -> None:
+    """Pruning named machines leaves shared vars alone; only a whole-clan
+    prune removes orphaned shared vars.
+    """
+    flake = flake_with_sops
+
+    config = flake.machines["my_machine"] = create_test_machine_config()
+    shared_gen = config["clan"]["core"]["vars"]["generators"]["orphan_shared"]
+    shared_gen["share"] = True
+    shared_gen["files"]["val"]["secret"] = False
+    shared_gen["script"] = 'echo -n data > "$out"/val'
+
+    flake.refresh()
+    monkeypatch.chdir(flake.path)
+
+    cli.run(["vars", "generate", "--flake", str(flake.path), "my_machine"])
+
+    flake.machines["my_machine"] = create_test_machine_config()
+    flake.refresh()
+
+    shared_id = GeneratorId(name="orphan_shared", placement=Shared())
+    store = in_repo.VarsStore(flake=Flake(str(flake.path)))
+
+    cli.run(["vars", "prune", "--flake", str(flake.path), "my_machine", "--yes"])
+    assert store.exists(shared_id, "val")
+
+    cli.run(["vars", "prune", "--flake", str(flake.path), "--yes"])
+    assert not store.exists(shared_id, "val")
+
+
+@pytest.mark.broken_on_darwin
+@pytest.mark.with_core
+def test_prune_unknown_machine(
+    monkeypatch: pytest.MonkeyPatch,
+    flake_with_sops: ClanFlake,
+) -> None:
+    """A machine that is neither configured nor has vars on disk is an error."""
+    flake = flake_with_sops
+
+    config = flake.machines["my_machine"] = create_test_machine_config()
+    shared_gen = config["clan"]["core"]["vars"]["generators"]["orphan_shared"]
+    shared_gen["share"] = True
+    shared_gen["files"]["val"]["secret"] = False
+    shared_gen["script"] = 'echo -n data > "$out"/val'
+
+    flake.refresh()
+    monkeypatch.chdir(flake.path)
+
+    cli.run(["vars", "generate", "--flake", str(flake.path), "my_machine"])
+
+    flake.machines["my_machine"] = create_test_machine_config()
+    flake.refresh()
+
+    with pytest.raises(ClanError, match="my_machin"):
+        cli.run(["vars", "prune", "--flake", str(flake.path), "my_machin", "--yes"])
+
+    store = in_repo.VarsStore(flake=Flake(str(flake.path)))
+    assert store.exists(GeneratorId(name="orphan_shared", placement=Shared()), "val")
