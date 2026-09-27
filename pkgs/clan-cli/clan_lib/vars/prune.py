@@ -23,6 +23,7 @@ class OrphanedEntry:
     var_name: str
     placement_prefix: str  # e.g. "per-machine/myhost" or "shared"
     path: Path  # absolute path to the var directory on disk
+    generator_defined: bool = False
 
 
 @dataclass
@@ -113,18 +114,18 @@ def find_orphaned_vars(
         if not disk_vars:
             continue
 
+        expected: set[tuple[str, str]] = set()
+        defined_generators: set[str] = set()
         if machine_name in config_machines:
             generators = get_machine_generators([machine_name], flake)
-            expected: set[tuple[str, str]] = set()
             for gen in generators:
                 if (
                     isinstance(gen.key.placement, PerMachine)
                     and gen.key.placement.machine == machine_name
                 ):
+                    defined_generators.add(gen.name)
                     for var in gen.files:
                         expected.add((gen.name, var.name))
-        else:
-            expected = set()
 
         for gen_name, var_name in sorted(disk_vars - expected):
             var_path = vars_base / per_machine_prefix / gen_name / var_name
@@ -134,6 +135,7 @@ def find_orphaned_vars(
                     var_name=var_name,
                     placement_prefix=per_machine_prefix,
                     path=var_path,
+                    generator_defined=gen_name in defined_generators,
                 )
             )
 
@@ -149,8 +151,10 @@ def find_orphaned_vars(
         # Evaluate ALL machines to determine which shared generators are still used
         all_generators = get_machine_generators(sorted(config_machines), flake)
         expected_shared: set[tuple[str, str]] = set()
+        defined_shared: set[str] = set()
         for gen in all_generators:
             if isinstance(gen.key.placement, Shared):
+                defined_shared.add(gen.name)
                 for var in gen.files:
                     expected_shared.add((gen.name, var.name))
 
@@ -162,6 +166,7 @@ def find_orphaned_vars(
                     var_name=var_name,
                     placement_prefix=shared_prefix,
                     path=var_path,
+                    generator_defined=gen_name in defined_shared,
                 )
             )
 
@@ -275,6 +280,9 @@ def prune_vars(
             log.info(
                 f"Removed orphaned var: {entry.placement_prefix}/{entry.generator_name}/{entry.var_name}"
             )
+
+        if entry.generator_defined:
+            continue
 
         # Clean up generator dir if now empty (only real var dirs, ignore dotfiles)
         generator_dir = vars_base / entry.placement_prefix / entry.generator_name

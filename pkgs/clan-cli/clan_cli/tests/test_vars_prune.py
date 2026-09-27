@@ -4,12 +4,14 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from clan_cli.tests.age_keys import SopsSetup
+from clan_cli.tests.age_keys import KeyPair, SopsSetup
 from clan_cli.tests.fixtures_flakes import ClanFlake, create_test_machine_config
 from clan_cli.tests.helpers import cli
+from clan_cli.tests.test_vars_age import setup_age_flake
 from clan_lib.errors import ClanError
 from clan_lib.flake import Flake
 from clan_lib.vars._types import GeneratorId, PerMachine, Shared
+from clan_lib.vars.check import check_vars
 from clan_lib.vars.generator import Generator
 from clan_lib.vars.prune import find_orphaned_vars, prune_vars
 from clan_lib.vars.public_modules import in_repo
@@ -726,3 +728,40 @@ def test_prune_untracked_orphan(
         check=True,
     ).stdout
     assert status == ""
+
+
+@pytest.mark.broken_on_darwin
+@pytest.mark.with_core
+def test_prune_keeps_validation_hash_of_live_generator(
+    monkeypatch: pytest.MonkeyPatch,
+    flake: ClanFlake,
+    age_keys: list[KeyPair],
+) -> None:
+    """With the age backend a live generator's directory below vars/ can hold
+    nothing but its validation hash once an orphaned public var is removed.
+    Prune must keep it, or the generator is regenerated on the next run.
+    """
+    setup_age_flake(flake, monkeypatch, age_keys[0])
+
+    gen = flake.machines["my_machine"]["clan"]["core"]["vars"]["generators"]["my_gen"]
+    gen["validation"] = "v1"
+    gen["files"]["my_secret"]["secret"] = True
+    gen["files"]["my_public"]["secret"] = False
+    gen["script"] = 'echo -n s > "$out"/my_secret; echo -n p > "$out"/my_public'
+    flake.refresh()
+
+    cli.run(["vars", "generate", "--flake", str(flake.path), "my_machine"])
+
+    del gen["files"]["my_public"]
+    gen["script"] = 'echo -n s > "$out"/my_secret'
+    flake.refresh()
+
+    gen_dir = flake.path / "vars" / "per-machine" / "my_machine" / "my_gen"
+    assert (gen_dir / "my_public").is_dir()
+    assert check_vars("my_machine", Flake(str(flake.path)))
+
+    cli.run(["vars", "prune", "--flake", str(flake.path), "--yes"])
+
+    assert not (gen_dir / "my_public").exists()
+    assert (gen_dir / ".validation-hash").exists()
+    assert check_vars("my_machine", Flake(str(flake.path)))
