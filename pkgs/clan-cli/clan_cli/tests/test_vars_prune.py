@@ -1,7 +1,10 @@
 import shutil
 import subprocess as sp
+from collections.abc import Callable
+from pathlib import Path
 
 import pytest
+from clan_cli.tests.age_keys import SopsSetup
 from clan_cli.tests.fixtures_flakes import ClanFlake, create_test_machine_config
 from clan_cli.tests.helpers import cli
 from clan_lib.flake import Flake
@@ -442,3 +445,72 @@ def test_prune_all_machines(
         GeneratorId(name="gen_b", placement=PerMachine(machine="machine_b")),
         "val_b",
     )
+
+
+CLAN_NIX_WITH_DIRECTORY = """
+{
+  directory = ./clan;
+  meta.name = "test-prune-directory";
+
+  inventory.machines.my_machine = {};
+
+  machines.my_machine = { ... }: {
+    nixpkgs.hostPlatform = "x86_64-linux";
+    clan.core.settings.state-version.enable = false;
+    clan.core.vars.generators.my_generator = {
+      files.my_value.secret = false;
+      script = "echo -n value > $out/my_value";
+    };
+  };
+}
+"""
+
+
+def _git_commit_all(path: Path, message: str) -> None:
+    sp.run(["git", "add", "-A"], cwd=path, check=True)
+    sp.run(
+        [
+            "git",
+            "-c",
+            "user.name=test",
+            "-c",
+            "user.email=test@test.com",
+            "commit",
+            "-m",
+            message,
+        ],
+        cwd=path,
+        check=True,
+    )
+
+
+@pytest.mark.broken_on_darwin
+@pytest.mark.with_core
+def test_prune_respects_clan_directory(
+    clan_flake: Callable[..., Flake],
+    sops_setup: SopsSetup,
+) -> None:
+    """Prune looks for vars below clan.directory, not below the flake root."""
+    flake = clan_flake(raw=CLAN_NIX_WITH_DIRECTORY)
+    clan_dir = flake.path / "clan"
+    clan_dir.mkdir(exist_ok=True)
+    sp.run(["git", "init", "-b", "main"], cwd=flake.path, check=True)
+    _git_commit_all(flake.path, "init")
+    sops_setup.init(flake.path)
+
+    cli.run(["vars", "generate", "--flake", str(flake.path), "my_machine"])
+
+    stale = clan_dir / "vars" / "per-machine" / "my_machine" / "stale_gen" / "val"
+    stale.mkdir(parents=True)
+    (stale / "value").write_text("stale")
+    _git_commit_all(flake.path, "add stale var")
+
+    orphans = find_orphaned_vars(["my_machine"], Flake(str(flake.path)))
+    assert [e.path for e in orphans.entries] == [stale]
+
+    cli.run(["vars", "prune", "--flake", str(flake.path), "my_machine"])
+
+    assert not stale.exists()
+    assert (
+        clan_dir / "vars" / "per-machine" / "my_machine" / "my_generator" / "my_value"
+    ).exists()
