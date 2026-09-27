@@ -31,13 +31,19 @@ def prune_command(args: argparse.Namespace) -> None:
     orphans = find_orphaned_vars(machine_names, flake)
 
     if not orphans.entries:
-        log.info("No orphaned vars found.")
+        print("No orphaned vars found.")
         return
 
-    log.info(f"Found orphaned vars:\n{orphans.text()}")
+    print(f"Found orphaned vars:\n{orphans.text()}")
 
     if args.dry_run:
         return
+
+    if not args.yes:
+        confirm = input("Delete these vars? [y/N]: ").strip().lower()
+        if confirm not in ("y", "yes"):
+            log.info("Aborted.")
+            return
 
     prune_vars(flake, orphans)
     log.info("Orphaned vars removed.")
@@ -58,6 +64,13 @@ def register_prune_parser(parser: argparse.ArgumentParser) -> None:
         "-n",
         action="store_true",
         help="only list orphaned vars without removing them",
+        default=False,
+    )
+    parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="do not ask for confirmation",
         default=False,
     )
     parser.set_defaults(func=prune_command)
