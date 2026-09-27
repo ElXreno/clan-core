@@ -10,9 +10,11 @@ from clan_lib.cmd import Log, RunOpts, run
 from clan_lib.errors import ClanError
 from clan_lib.flake.flake import Flake
 from clan_lib.locked_open import locked_open
+from clan_lib.machines.machines import Machine
 from clan_lib.nix import nix_shell
-from clan_lib.vars._types import PerMachine, Shared
-from clan_lib.vars.generator import get_machine_generators
+from clan_lib.vars._types import GeneratorId, PerMachine, Shared
+from clan_lib.vars.generator import Generator, get_machine_generators
+from clan_lib.vars.secret_modules import sops
 
 log = logging.getLogger(__name__)
 
@@ -27,16 +29,37 @@ class OrphanedEntry:
 
 
 @dataclass
+class StaleRecipient:
+    generator: GeneratorId
+    var_name: str
+    machine: str
+
+    def __str__(self) -> str:
+        return f"{self.generator.rel_dir()}/{self.var_name}/machines/{self.machine}"
+
+
+@dataclass
 class OrphanedVars:
     entries: list[OrphanedEntry] = field(default_factory=list)
+    recipients: list[StaleRecipient] = field(default_factory=list)
+
+    @property
+    def empty(self) -> bool:
+        return not self.entries and not self.recipients
 
     def text(self) -> str:
-        if not self.entries:
+        if self.empty:
             return "No orphaned vars found."
-        lines: list[str] = [
-            f"  - {entry.placement_prefix}/{entry.generator_name}/{entry.var_name}"
-            for entry in self.entries
-        ]
+        lines: list[str] = []
+        if self.entries:
+            lines.append("Orphaned vars:")
+            lines.extend(
+                f"  - {entry.placement_prefix}/{entry.generator_name}/{entry.var_name}"
+                for entry in self.entries
+            )
+        if self.recipients:
+            lines.append("Machines that no longer use a shared secret:")
+            lines.extend(f"  - {recipient}" for recipient in self.recipients)
         return "\n".join(lines)
 
 
@@ -170,22 +193,52 @@ def find_orphaned_vars(
                 )
             )
 
+        orphans.recipients = _find_stale_recipients(all_generators, flake)
+
     if generator_names is not None:
         wanted = set(generator_names)
         orphans.entries = [e for e in orphans.entries if e.generator_name in wanted]
+        orphans.recipients = [
+            r for r in orphans.recipients if r.generator.name in wanted
+        ]
 
     return orphans
+
+
+def _find_stale_recipients(
+    generators: Iterable[Generator], flake: Flake
+) -> list[StaleRecipient]:
+    """Find machines that can decrypt a shared sops secret without declaring it."""
+    result: list[StaleRecipient] = []
+    for gen in generators:
+        if not isinstance(gen.key.placement, Shared) or not gen.machines:
+            continue
+        store = Machine(name=gen.machines[0], flake=flake).secret_vars_store
+        if not isinstance(store, sops.SecretStore):
+            continue
+        for var in gen.files:
+            if not var.secret or not store.exists(gen.key, var.name):
+                continue
+            wanted = set(var.machines) if var.deploy else set()
+            result.extend(
+                StaleRecipient(generator=gen.key, var_name=var.name, machine=machine)
+                for machine in sorted(
+                    store.machines_with_access(gen.key, var.name) - wanted
+                )
+            )
+    return result
 
 
 def _commit_removals(
     flake_dir: Path,
     removed_paths: list[Path],
+    changed_paths: list[Path],
     commit_message: str,
 ) -> None:
-    """Stage removed paths and commit to git."""
+    """Stage removed and changed paths and commit to git."""
     if os.environ.get("CLAN_NO_COMMIT", None):
         return
-    if not removed_paths:
+    if not removed_paths and not changed_paths:
         return
     if not (flake_dir / ".git").exists():
         return
@@ -199,26 +252,33 @@ def _commit_removals(
             raise ClanError(msg)
         real_git_dir = flake_dir / actual_git_dir[len("gitdir: ") :]
 
-    path_strs = [str(p) for p in removed_paths]
+    removed_strs = [str(p) for p in removed_paths]
+    changed_strs = [str(p) for p in changed_paths]
 
     with locked_open(real_git_dir / "clan.lock", "w+"):
-        # Use git rm -r --cached to stage all deletions at once
-        cmd = nix_shell(
-            ["git"],
-            [
-                "git",
-                "-C",
-                str(flake_dir),
-                "rm",
-                "-r",
-                "--cached",
-                "--ignore-unmatch",
-                "--quiet",
-                "--",
-                *path_strs,
-            ],
-        )
-        run(cmd, RunOpts(log=Log.BOTH, error_msg="Failed to stage removed files"))
+        if removed_strs:
+            cmd = nix_shell(
+                ["git"],
+                [
+                    "git",
+                    "-C",
+                    str(flake_dir),
+                    "rm",
+                    "-r",
+                    "--cached",
+                    "--ignore-unmatch",
+                    "--quiet",
+                    "--",
+                    *removed_strs,
+                ],
+            )
+            run(cmd, RunOpts(log=Log.BOTH, error_msg="Failed to stage removed files"))
+        if changed_strs:
+            cmd = nix_shell(
+                ["git"],
+                ["git", "-C", str(flake_dir), "add", "--", *changed_strs],
+            )
+            run(cmd, RunOpts(log=Log.BOTH, error_msg="Failed to stage changed files"))
 
         # untracked removed paths are not valid commit pathspecs
         cmd = nix_shell(
@@ -230,10 +290,10 @@ def _commit_removals(
                 "diff",
                 "--cached",
                 "--name-only",
-                "--diff-filter=D",
                 "-z",
                 "--",
-                *path_strs,
+                *removed_strs,
+                *changed_strs,
             ],
         )
         result = run(cmd, RunOpts(cwd=flake_dir))
@@ -313,9 +373,23 @@ def prune_vars(
                 removed_paths.append(machine_dir)
                 log.info(f"Removed empty machine directory: {prefix}")
 
+    changed_paths: list[Path] = []
+    if orphans.recipients:
+        store = sops.SecretStore(flake)
+        for recipient in orphans.recipients:
+            for path in store.revoke_machine_access(
+                recipient.generator, recipient.var_name, recipient.machine
+            ):
+                if path.exists():
+                    changed_paths.append(path)
+                else:
+                    removed_paths.append(path)
+            log.info(f"Removed stale machine recipient: {recipient}")
+
     _commit_removals(
         flake.path,
         removed_paths,
+        changed_paths,
         "Remove orphaned vars",
     )
 
