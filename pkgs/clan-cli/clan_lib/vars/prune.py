@@ -62,16 +62,26 @@ def _discover_disk_vars(vars_base: Path, prefix: str) -> set[tuple[str, str]]:
     return result
 
 
+def _disk_machines(vars_base: Path) -> set[str]:
+    per_machine_dir = vars_base / "per-machine"
+    if not per_machine_dir.is_dir():
+        return set()
+    return {d.name for d in per_machine_dir.iterdir() if d.is_dir()}
+
+
 def find_orphaned_vars(
-    machine_names: Iterable[str],
+    machine_names: Iterable[str] | None,
     flake: Flake,
 ) -> OrphanedVars:
     """Find vars on disk that are not referenced by any generator in the current config.
 
-    For per-machine vars, checks each machine's generators. Machine names that
-    are in the input list but no longer exist in the flake config are treated
-    as having zero generators, so every disk var under them is reported as
-    orphaned (this is how vars for fully-removed machines get pruned).
+    If machine_names is None, the whole clan is checked: every machine that is
+    configured or still has vars on disk, and the shared vars. Otherwise only
+    the per-machine vars of the given machines are checked.
+
+    Machines that no longer exist in the flake config are treated as having
+    zero generators, so every disk var under them is reported as orphaned
+    (this is how vars for fully-removed machines get pruned).
 
     For shared vars, evaluates all machines to avoid removing shared vars
     still used by other machines.
@@ -79,8 +89,18 @@ def find_orphaned_vars(
     vars_base = get_clan_dir(flake) / "vars"
     orphans = OrphanedVars()
 
-    machine_list = list(machine_names)
     config_machines = set(flake.list_machines().keys())
+    known_machines = config_machines | _disk_machines(vars_base)
+    if machine_names is None:
+        machine_list = sorted(known_machines)
+    else:
+        machine_list = list(machine_names)
+        unknown = [m for m in machine_list if m not in known_machines]
+        if unknown:
+            msg = (
+                f"Machine(s) not found in the clan or in its vars: {', '.join(unknown)}"
+            )
+            raise ClanError(msg)
 
     # --- Per-machine vars ---
     for machine_name in machine_list:
@@ -114,14 +134,16 @@ def find_orphaned_vars(
                 )
             )
 
+    if machine_names is not None:
+        return orphans
+
     # --- Shared vars ---
     shared_prefix = "shared"
     shared_disk_vars = _discover_disk_vars(vars_base, shared_prefix)
 
     if shared_disk_vars:
         # Evaluate ALL machines to determine which shared generators are still used
-        all_machine_names = list(flake.list_machines().keys())
-        all_generators = get_machine_generators(all_machine_names, flake)
+        all_generators = get_machine_generators(sorted(config_machines), flake)
         expected_shared: set[tuple[str, str]] = set()
         for gen in all_generators:
             if isinstance(gen.key.placement, Shared):
