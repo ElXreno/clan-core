@@ -99,6 +99,9 @@ Examples:
   $ clan vars prune [MACHINE] --dry-run
   Will list orphaned vars without removing them.
 
+  $ clan vars prune [MACHINE] -g GENERATOR -g GENERATOR
+  Will only remove orphaned vars of the given generators.
+
   $ clan vars prune --yes
   Will remove orphaned vars for all machines without asking.
         """

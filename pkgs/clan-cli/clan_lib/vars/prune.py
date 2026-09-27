@@ -72,12 +72,15 @@ def _disk_machines(vars_base: Path) -> set[str]:
 def find_orphaned_vars(
     machine_names: Iterable[str] | None,
     flake: Flake,
+    generator_names: Iterable[str] | None = None,
 ) -> OrphanedVars:
     """Find vars on disk that are not referenced by any generator in the current config.
 
     If machine_names is None, the whole clan is checked: every machine that is
     configured or still has vars on disk, and the shared vars. Otherwise only
     the per-machine vars of the given machines are checked.
+
+    If generator_names is given, only orphans of those generators are returned.
 
     Machines that no longer exist in the flake config are treated as having
     zero generators, so every disk var under them is reported as orphaned
@@ -134,12 +137,13 @@ def find_orphaned_vars(
                 )
             )
 
-    if machine_names is not None:
-        return orphans
-
     # --- Shared vars ---
     shared_prefix = "shared"
-    shared_disk_vars = _discover_disk_vars(vars_base, shared_prefix)
+    shared_disk_vars = (
+        _discover_disk_vars(vars_base, shared_prefix)
+        if machine_names is None
+        else set()
+    )
 
     if shared_disk_vars:
         # Evaluate ALL machines to determine which shared generators are still used
@@ -160,6 +164,10 @@ def find_orphaned_vars(
                     path=var_path,
                 )
             )
+
+    if generator_names is not None:
+        wanted = set(generator_names)
+        orphans.entries = [e for e in orphans.entries if e.generator_name in wanted]
 
     return orphans
 
