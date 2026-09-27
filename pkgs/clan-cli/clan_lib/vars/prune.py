@@ -390,7 +390,7 @@ def prune_vars(
         flake.path,
         removed_paths,
         changed_paths,
-        "Remove orphaned vars",
+        "vars: prune orphaned vars",
     )
 
     return removed_paths
