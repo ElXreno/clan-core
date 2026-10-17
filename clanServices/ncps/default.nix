@@ -65,6 +65,15 @@ in
         description = "The port on which to host the ncps server";
       };
 
+      openFirewall = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Open the port on every interface. Disable this to reach the cache
+          only through interfaces the firewall already trusts, such as a VPN.
+        '';
+      };
+
       allowPutVerb = lib.mkOption {
         type = lib.types.bool;
         default = false;
@@ -105,7 +114,7 @@ in
               '';
             };
 
-            networking.firewall.allowedTCPPorts = [ settings.port ];
+            networking.firewall.allowedTCPPorts = lib.mkIf settings.openFirewall [ settings.port ];
 
             services.ncps.enable = true;
             services.ncps.server.addr = ":${toString settings.port}";
